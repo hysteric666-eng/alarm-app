@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>目覚まし時計</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7b6ff0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="アラーム">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f0f14;--surface:#1a1a24;--surface2:#22222f;
+  --border:#2e2e3f;--accent:#7b6ff0;--accent2:#b8aefc;
+  --text:#e8e8f0;--text2:#777799;--danger:#f06f6f;
+  --font:'Noto Sans JP','Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;
+}
+body{background:#07070d;color:var(--text);font-family:var(--font);
+  min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:24px 0 48px;}
+.phone{width:390px;height:844px;background:var(--bg);border-radius:44px;
+  border:2px solid #2a2a3a;overflow:hidden;position:relative;
+  box-shadow:0 40px 120px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.05);
+  display:flex;flex-direction:column;}
+.statusbar{height:44px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:space-between;padding:0 28px;font-size:12px;font-weight:600;color:var(--text2);}
+.screen{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.screen.active{display:flex;}
+.topbar{padding:10px 20px;display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
+.topbar-title{font-size:19px;font-weight:700;color:var(--text);}
+.topbar-btn{background:none;border:none;color:var(--accent2);font-size:14px;font-weight:500;
+  cursor:pointer;font-family:var(--font);padding:4px 2px;}
+.topbar-save{background:var(--accent);color:white;border:none;border-radius:20px;
+  padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);}
+.list-scroll{flex:1;overflow-y:auto;padding:8px 16px 100px;}
+.list-scroll::-webkit-scrollbar{display:none;}
+.empty-state{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;color:var(--text2);min-height:300px;}
+.empty-state .ei{font-size:52px;opacity:0.25;}
+.empty-state p{font-size:14px;}
+.empty-state small{font-size:12px;opacity:0.6;}
+
+/* ── GROUP ── */
+.group-wrap{margin-bottom:4px;}
+.group-wrap.is-dragging>.group-header{opacity:0.3;transform:scale(0.98);}
+.group-header{display:flex;align-items:center;gap:8px;padding:9px 12px;
+  background:var(--surface);border-radius:10px;margin:10px 0 6px;
+  border:1px solid var(--border);user-select:none;
+  transition:background 0.12s,border-color 0.12s,opacity 0.12s,transform 0.12s;
+  cursor:default;touch-action:none;}
+.group-header.lp-hint{background:var(--surface2);border-color:var(--accent2);}
+.group-header.drop-here{border-color:var(--accent);background:rgba(123,111,240,0.14);}
+.g-handle{color:var(--text2);font-size:15px;cursor:grab;opacity:0.35;
+  flex-shrink:0;line-height:1;padding:2px 0;touch-action:none;transition:opacity 0.15s;}
+.group-header:hover .g-handle{opacity:0.8;}
+.g-handle.lp-hint{opacity:1;color:var(--accent2);}
+.g-handle-gap{width:9px;flex-shrink:0;}
+.g-emoji-btn{background:none;border:none;cursor:default;font-size:17px;padding:0 4px 0 0;line-height:1;flex-shrink:0;}
+.g-name{font-size:13px;font-weight:600;color:var(--text);flex:1;cursor:default;
+  padding:2px 0;border-bottom:1px solid transparent;transition:border-color 0.15s;}
+.g-name.lp-hint{border-bottom-color:rgba(184,174,252,0.5);}
+.group-items{display:flex;flex-direction:column;gap:6px;min-height:6px;}
+.group-items.collapsed{display:none;}
+.group-items.drop-zone{min-height:50px;background:rgba(123,111,240,0.07);
+  border-radius:10px;border:1px dashed rgba(123,111,240,0.45);padding:6px;}
+
+/* DROP PLACEHOLDERS */
+.ph-alarm{height:4px;border-radius:2px;background:var(--accent);margin:2px 0;
+  box-shadow:0 0 10px rgba(123,111,240,0.9);pointer-events:none;}
+.ph-group{height:48px;border-radius:10px;border:2px dashed rgba(123,111,240,0.55);
+  background:rgba(123,111,240,0.07);margin:4px 0;pointer-events:none;
+  animation:pulse 0.8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{border-color:rgba(123,111,240,0.3)}50%{border-color:rgba(123,111,240,0.9)}}
+
+/* ── ALARM CARD ── */
+.alarm-card{background:var(--surface);border-radius:12px;border:1px solid var(--border);
+  padding:12px 14px;display:flex;align-items:center;gap:10px;
+  user-select:none;touch-action:none;
+  transition:background 0.12s,border-color 0.12s,opacity 0.12s,transform 0.12s;
+  cursor:grab;animation:slideIn 0.2s ease;}
+.alarm-card:active{cursor:grabbing;}
+@keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.alarm-card:hover{background:var(--surface2);border-color:#3e3e55;}
+.alarm-card.disabled{opacity:0.38;}
+.alarm-card.is-dragging{opacity:0.25;transform:scale(0.97);}
+.alarm-card.lp-hint{background:var(--surface2);border-color:var(--accent2);}
+
+/* AM/PM 縦バッジ（時刻の左） */
+.ampm-col{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;margin-right:4px;flex-shrink:0;}
+.ampm-top,.ampm-bot{font-size:10px;font-weight:700;line-height:1.2;padding:2px 4px;
+  border-radius:3px;letter-spacing:0.02em;transition:all 0.15s;}
+/* デフォルト：両方グレーアウト */
+.ampm-top{color:var(--text2);background:transparent;opacity:0.35;}
+.ampm-bot{color:var(--text2);background:transparent;opacity:0.35;}
+/* アクティブ側だけ明るく */
+.ampm-top.active{color:var(--accent2);background:rgba(184,174,252,0.18);opacity:1;}
+.ampm-bot.active{color:var(--accent2);background:rgba(184,174,252,0.18);opacity:1;}
+
+.alarm-time{font-size:34px;font-weight:300;line-height:1;color:var(--text);
+  letter-spacing:-0.5px;min-width:88px;font-feature-settings:'tnum';}
+.alarm-card.disabled .alarm-time{color:var(--text2);}
+.alarm-meta{flex:1;min-width:0;}
+.alarm-lbl{font-size:13px;font-weight:500;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.alarm-days{font-size:11px;color:var(--accent2);margin-top:2px;}
+/* ── 右端ゴミ箱の位置統一 ──
+   アラーム右端: [a-del 24px] [gap 18px] [toggle 42px] = 右から 42px がトグル右端
+   タイマー右端: [tc-del 24px] [tc-btn 34px] [gap 8px] [tc-btn? 34px] [gap 8px]
+   グループ右端: [g-chevron ~14px] [g-del 24px] [g-count] ...
+   → ゴミ箱を右から (42px + 18px/2) = 51px に揃える
+/* ── 右端アクション共通 ── */
+.alarm-actions{display:flex;align-items:center;gap:0;flex-shrink:0;}
+.toggle{width:42px;height:24px;background:var(--border);border-radius:12px;
+  position:relative;cursor:pointer;transition:background 0.2s;border:none;flex-shrink:0;touch-action:manipulation;}
+.toggle.on{background:var(--accent);}
+.toggle::after{content:'';position:absolute;width:18px;height:18px;background:white;
+  border-radius:50%;top:3px;left:3px;transition:transform 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+.toggle.on::after{transform:translateX(18px);}
+/* ゴミ箱: 全カード共通サイズ・縦中央 */
+.a-del,.tc-del,.g-del{
+  background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer;
+  width:24px;height:24px;padding:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity 0.15s,background 0.15s;
+  touch-action:manipulation;}
+.alarm-card:hover .a-del,
+.timer-card:hover .tc-del,
+.group-header:hover .g-del{opacity:1;}
+.a-del{margin-left:6px;}
+.tc-del{margin-left:6px;}
+.g-del{margin-left:6px;}
+.a-del:hover,.tc-del:hover,.g-del:hover{background:rgba(240,111,111,0.15);}
+
+/* タイマー actions */
+.tc-actions{display:flex;align-items:center;flex-shrink:0;}
+.tc-btn{width:42px;height:24px;border-radius:12px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  transition:background 0.15s,transform 0.15s;margin-left:6px;touch-action:manipulation;}
+.tc-btn:first-child{margin-left:0;}
+.tc-btn:hover{transform:scale(1.07);}
+.tc-play-run{background:var(--accent);color:white;}
+.tc-play-pause{background:rgba(123,111,240,0.2);color:var(--accent2);}
+.tc-play-restart{background:rgba(240,111,111,0.2);color:var(--danger);}
+.tc-stop{background:rgba(255,255,255,0.08);color:var(--text2);font-size:11px;width:34px;}
+.tc-stop:hover{background:rgba(240,111,111,0.2);color:var(--danger);}
+
+/* グループ右端 */
+.g-right{display:flex;align-items:center;flex-shrink:0;}
+.g-count{font-size:11px;color:var(--text2);margin-right:4px;}
+.g-chevron{font-size:15px;font-weight:700;color:var(--text2);transition:transform 0.2s;display:inline-block;
+  width:42px;text-align:center;}
+.group-header.collapsed .g-chevron{transform:rotate(-90deg);}
+
+/* ── TIMER CARD (ホーム画面) ── */
+.timer-card{background:var(--surface);border-radius:12px;border:1px solid var(--border);
+  padding:12px 14px;display:flex;align-items:center;gap:10px;
+  user-select:none;touch-action:none;
+  animation:slideIn 0.2s ease;transition:background 0.12s,border-color 0.12s,opacity 0.12s,transform 0.12s;
+  cursor:grab;}
+.timer-card:active{cursor:grabbing;}
+.timer-card:hover{background:var(--surface2);}
+.timer-card.tc-running{border-color:rgba(123,111,240,0.5);}
+.timer-card.tc-finished{border-color:var(--danger);}
+.timer-card.is-dragging{opacity:0.25;transform:scale(0.97);}
+.timer-card.lp-hint{background:var(--surface2);border-color:var(--accent2);}
+
+/* タイマーアイコン（時刻左） */
+.tc-icon{font-size:20px;flex-shrink:0;line-height:1;margin-right:2px;}
+.tc-icon.tc-running{animation:spinPulse 1s ease-in-out infinite;}
+@keyframes spinPulse{0%,100%{opacity:1}50%{opacity:0.5}}
+
+.tc-time{font-size:28px;font-weight:300;line-height:1;color:var(--text);
+  min-width:80px;font-feature-settings:'tnum';letter-spacing:-0.5px;}
+.tc-time.tc-running{color:var(--accent2);}
+.tc-time.tc-finished{color:var(--danger);animation:tPulse 0.7s ease-in-out infinite;}
+@keyframes tPulse{0%,100%{opacity:1}50%{opacity:0.35}}
+.tc-meta{flex:1;min-width:0;}
+.tc-name{font-size:13px;font-weight:500;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tc-total{font-size:11px;color:var(--text2);margin-top:2px;}
+/* ── DRAG GHOST ── */
+.drag-ghost{position:fixed;pointer-events:none;z-index:9999;
+  border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.65);
+  opacity:0.9;transform:scale(1.04) rotate(1deg);transition:none;}
+
+/* ── FAB ── */
+.fab-wrap{position:absolute;bottom:24px;right:20px;z-index:50;}
+.fab-backdrop{position:absolute;inset:0;z-index:49;display:none;}
+.fab-backdrop.open{display:block;}
+.fab-menu{position:absolute;bottom:62px;right:0;display:flex;flex-direction:column;
+  align-items:flex-end;gap:10px;pointer-events:none;opacity:0;transform:translateY(12px);
+  transition:opacity 0.2s,transform 0.2s;}
+.fab-menu.open{pointer-events:auto;opacity:1;transform:translateY(0);}
+.fab-item{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.fab-label{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  font-size:12px;font-weight:500;padding:6px 12px;border-radius:8px;
+  white-space:nowrap;font-family:var(--font);cursor:pointer;transition:background 0.15s,border-color 0.15s;}
+.fab-label:hover{background:var(--accent);border-color:var(--accent);color:white;}
+.fab-sub{width:42px;height:42px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:50%;color:var(--accent2);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:background 0.15s,border-color 0.15s;}
+.fab-sub:hover{background:var(--accent);border-color:var(--accent);color:white;}
+.fab-main{width:54px;height:54px;background:var(--accent);border:none;border-radius:50%;
+  color:white;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 20px rgba(123,111,240,0.55);transition:transform 0.25s,box-shadow 0.2s;
+  position:relative;z-index:2;font-family:var(--font);}
+.fab-main.open{transform:rotate(45deg);}
+
+/* 24/12時間切替 */
+.h-toggle{background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  font-size:11px;font-weight:700;padding:4px 9px;border-radius:12px;
+  cursor:pointer;font-family:var(--font);transition:all 0.15s;letter-spacing:0.03em;}
+.h-toggle:hover{border-color:var(--accent2);color:var(--accent2);}
+
+/* ── MODALS ── */
+.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.65);z-index:60;
+  display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+.modal-overlay.open{opacity:1;pointer-events:auto;}
+.modal-sheet{width:100%;background:var(--surface);border-radius:20px 20px 0 0;
+  padding:20px 20px 40px;border-top:1px solid var(--border);
+  transform:translateY(100%);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);}
+.modal-overlay.open .modal-sheet{transform:translateY(0);}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{font-size:15px;font-weight:600;margin-bottom:14px;color:var(--text);}
+.modal-input{width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;
+  font-family:var(--font);outline:none;transition:border-color 0.15s;margin-bottom:14px;}
+.modal-input:focus{border-color:var(--accent2);}
+.modal-input::placeholder{color:var(--text2);}
+.modal-emoji-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+.modal-emoji{width:38px;height:38px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;font-size:18px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;transition:border-color 0.15s,background 0.15s;}
+.modal-emoji.selected{border-color:var(--accent);background:rgba(123,111,240,0.2);}
+.modal-btns{display:flex;gap:10px;}
+.modal-btn{flex:1;padding:11px;border-radius:12px;border:none;cursor:pointer;
+  font-size:14px;font-weight:600;font-family:var(--font);}
+.modal-btn-cancel{background:var(--surface2);color:var(--text2);}
+.modal-btn-ok{background:var(--accent);color:white;}
+.modal-btn-danger{background:var(--danger);color:white;}
+.confirm-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.7);z-index:70;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity 0.18s;}
+.confirm-overlay.open{opacity:1;pointer-events:auto;}
+.confirm-box{background:var(--surface);border-radius:18px;padding:24px 22px 20px;
+  width:300px;border:1px solid var(--border);transform:scale(0.92);transition:transform 0.18s;}
+.confirm-overlay.open .confirm-box{transform:scale(1);}
+.confirm-icon{font-size:36px;text-align:center;margin-bottom:10px;}
+.confirm-msg{font-size:14px;color:var(--text);text-align:center;line-height:1.6;margin-bottom:18px;}
+.confirm-msg strong{color:var(--accent2);}
+.confirm-msg small{display:block;font-size:11px;color:var(--text2);margin-top:4px;}
+.confirm-btns{display:flex;gap:10px;}
+
+/* ── EDIT ── */
+.edit-scroll{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;padding-bottom:40px;}
+.edit-scroll::-webkit-scrollbar{display:none;}
+.sec-card{background:var(--surface);border-radius:14px;border:1px solid var(--border);padding:14px 16px;}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent2);margin-bottom:12px;}
+.time-spinner{display:flex;align-items:center;justify-content:center;gap:6px;}
+.sp-unit{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.sp-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;font-family:var(--font);}
+.sp-btn:hover{background:var(--accent);border-color:var(--accent);}
+.sp-val{font-size:50px;font-weight:300;color:var(--text);line-height:1;
+  min-width:70px;text-align:center;font-feature-settings:'tnum';}
+.sp-lbl{font-size:11px;color:var(--text2);}
+.sp-colon{font-size:46px;font-weight:200;color:var(--text2);padding:0 2px;margin-top:-16px;}
+.group-sel-row{display:flex;flex-wrap:wrap;gap:6px;}
+.group-chip{background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  font-size:12px;font-weight:500;padding:5px 12px;border-radius:20px;
+  cursor:pointer;font-family:var(--font);transition:all 0.15s;}
+.group-chip.selected{background:var(--accent);border-color:var(--accent);color:white;}
+.lbl-input{width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;
+  font-family:var(--font);outline:none;transition:border-color 0.15s;}
+.lbl-input:focus{border-color:var(--accent2);}
+.lbl-input::placeholder{color:var(--text2);}
+.day-row{display:flex;gap:5px;flex-wrap:wrap;}
+.day-chip{width:36px;height:36px;border-radius:50%;background:var(--surface2);
+  border:1px solid var(--border);color:var(--text2);font-size:12px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font);}
+.day-chip.on{background:var(--accent);border-color:var(--accent);color:white;}
+.day-hint{font-size:11px;color:var(--text2);margin-top:8px;}
+.snooze-row{display:flex;align-items:center;gap:12px;}
+.snooze-row input[type=range]{flex:1;-webkit-appearance:none;height:4px;background:var(--border);border-radius:2px;outline:none;}
+.snooze-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;background:var(--accent);border-radius:50%;cursor:pointer;}
+.snooze-num{font-size:22px;font-weight:300;color:var(--accent2);min-width:34px;text-align:right;font-feature-settings:'tnum';}
+.snooze-u{font-size:11px;color:var(--text2);}
+.sound-btn{width:100%;background:var(--surface2);border:1px dashed var(--border);
+  border-radius:10px;padding:11px;color:var(--text2);font-size:13px;font-family:var(--font);
+  cursor:pointer;display:flex;align-items:center;gap:8px;transition:border-color 0.15s,color 0.15s;}
+.sound-btn:hover,.sound-btn.on{border-color:var(--accent);color:var(--accent2);}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.row-label{font-size:13px;font-weight:500;color:var(--text);}
+.row-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.vib-seg{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px;gap:2px;}
+.vib-btn{background:none;border:none;color:var(--text2);font-size:12px;font-weight:600;
+  padding:4px 12px;border-radius:16px;cursor:pointer;font-family:var(--font);transition:background 0.15s,color 0.15s;}
+.vib-btn.on{background:var(--accent);color:white;}
+.vol-row{display:flex;align-items:center;gap:10px;}
+.vol-icon{font-size:16px;flex-shrink:0;}
+.vol-row input[type=range]{flex:1;-webkit-appearance:none;height:4px;background:var(--border);border-radius:2px;outline:none;}
+.vol-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;background:var(--accent);border-radius:50%;cursor:pointer;}
+.vol-val{font-size:14px;font-weight:500;color:var(--accent2);min-width:30px;text-align:right;font-feature-settings:'tnum';}
+.sw{width:42px;height:24px;background:var(--border);border-radius:12px;
+  position:relative;cursor:pointer;transition:background 0.2s;border:none;flex-shrink:0;}
+.sw.on{background:var(--accent);}
+.sw::after{content:'';position:absolute;width:18px;height:18px;background:white;
+  border-radius:50%;top:3px;left:3px;transition:transform 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+.sw.on::after{transform:translateX(18px);}
+
+/* ── TIMER EDIT ── */
+.timer-wrap{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:24px;padding:0 24px 40px;}
+.timer-display{font-size:68px;font-weight:200;color:var(--text);letter-spacing:-2px;font-feature-settings:'tnum';line-height:1;}
+.timer-set-row{display:flex;align-items:center;gap:6px;}
+.t-sp-unit{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.t-sp-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:15px;
+  display:flex;align-items:center;justify-content:center;font-family:var(--font);}
+.t-sp-btn:hover{background:var(--accent);border-color:var(--accent);}
+.t-sp-val{font-size:44px;font-weight:300;color:var(--text);line-height:1;min-width:64px;text-align:center;font-feature-settings:'tnum';}
+.t-sp-lbl{font-size:11px;color:var(--text2);}
+.t-colon{font-size:40px;font-weight:200;color:var(--text2);margin-top:-12px;}
+.timer-presets{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+.timer-preset{background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  font-size:12px;font-weight:500;padding:5px 14px;border-radius:16px;
+  cursor:pointer;font-family:var(--font);transition:all 0.15s;}
+.timer-preset:hover{background:var(--accent);border-color:var(--accent);color:white;}
+.timer-lbl-input{background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:6px 12px;color:var(--text);font-size:13px;
+  font-family:var(--font);outline:none;width:180px;text-align:center;}
+.timer-lbl-input:focus{border-color:var(--accent2);}
+.timer-lbl-input::placeholder{color:var(--text2);}
+.timer-save-btn{background:var(--accent);color:white;border:none;border-radius:22px;
+  padding:10px 32px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);
+  box-shadow:0 4px 16px rgba(123,111,240,0.45);transition:opacity 0.15s;}
+.timer-save-btn:hover{opacity:0.85;}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span id="clock">--:--</span><span>🔋 87%</span></div>
+
+  <!-- ═══ LIST SCREEN ═══ -->
+  <div class="screen active" id="listScreen">
+    <div class="topbar">
+      <div class="topbar-title">⏰ 目覚まし時計</div>
+      <button class="h-toggle" id="hToggleBtn" onclick="toggleHourMode()">24h</button>
+    </div>
+    <div class="list-scroll" id="listScroll">
+      <div id="alarmList"></div>
+      <div id="timerList"></div>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="ei">⏰</div><p>アラームがありません</p><small>＋ボタンで追加しましょう</small>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <div class="fab-backdrop" id="fabBackdrop"></div>
+      <div class="fab-menu" id="fabMenu">
+        <div class="fab-item" id="fabAddAlarm"><div class="fab-label">アラームを追加</div><button class="fab-sub">⏰</button></div>
+        <div class="fab-item" id="fabAddTimer"><div class="fab-label">タイマーを追加</div><button class="fab-sub">⏱️</button></div>
+        <div class="fab-item" id="fabAddGroup"><div class="fab-label">グループを追加</div><button class="fab-sub">📁</button></div>
+      </div>
+      <button class="fab-main" id="fabMain">＋</button>
+    </div>
+  </div>
+
+  <!-- ═══ EDIT ALARM ═══ -->
+  <div class="screen" id="editScreen">
+    <div class="topbar">
+      <button class="topbar-btn" id="editBack">‹ 戻る</button>
+      <div class="topbar-title" id="editTitle">アラームを追加</div>
+      <button class="topbar-save" id="editSave">保存</button>
+    </div>
+    <div class="edit-scroll">
+      <div class="sec-card"><div class="sec-title">時刻</div>
+        <div class="time-spinner" id="editTimeSpinner">
+          <div id="editAmpmCol" style="display:none;flex-direction:column;align-items:center;justify-content:center;gap:2px;margin-right:4px;">
+            <span id="editAmTop" style="font-size:10px;font-weight:700;padding:2px 4px;border-radius:3px;cursor:pointer;transition:all 0.15s;">AM</span>
+            <span id="editAmBot" style="font-size:10px;font-weight:700;padding:2px 4px;border-radius:3px;cursor:pointer;transition:all 0.15s;">PM</span>
+          </div>
+          <div class="sp-unit"><button class="sp-btn" id="hUp">▲</button><div class="sp-val" id="spH">07</div><div class="sp-lbl" id="spHLbl">時</div><button class="sp-btn" id="hDn">▼</button></div>
+          <div class="sp-colon">:</div>
+          <div class="sp-unit"><button class="sp-btn" id="mUp">▲</button><div class="sp-val" id="spM">00</div><div class="sp-lbl">分</div><button class="sp-btn" id="mDn">▼</button></div>
+        </div>
+      </div>
+      <div class="sec-card"><div class="sec-title">グループ</div><div class="group-sel-row" id="groupSelRow"></div></div>
+      <div class="sec-card"><div class="sec-title">ラベル</div><input class="lbl-input" id="editLabel" type="text" placeholder="例: 起床、薬を飲む" maxlength="30"></div>
+      <div class="sec-card">
+        <div class="sec-title">繰り返し曜日</div>
+        <div class="day-row" id="dayRow"></div>
+        <div class="day-hint" id="dayHint">一回のみ</div>
+        <div style="height:10px;"></div>
+        <div class="row-between">
+          <div>
+            <div class="row-label" style="font-size:12px;">🎌 祝日を除外</div>
+            <div class="row-sub" id="holidayStatus">祝日はアラームをスキップ</div>
+          </div>
+          <button class="sw" id="holidaySw"></button>
+        </div>
+      </div>
+      <div class="sec-card"><div class="sec-title">スヌーズ</div><div class="snooze-row"><input type="range" id="snoozeSlider" min="1" max="30" value="5"><div><div class="snooze-num" id="snoozeVal">5</div><div class="snooze-u">分</div></div></div></div>
+      <div class="sec-card">
+        <div class="sec-title">アラーム音</div>
+        <button class="sound-btn" id="soundBtn"><span>🎵</span><span id="soundLabel">デフォルト着信音</span></button>
+        <div style="height:12px;"></div>
+        <div class="sec-title">音量</div>
+        <div class="vol-row"><span class="vol-icon" id="volIcon">🔉</span><input type="range" id="volSlider" min="0" max="100" value="80"><span class="vol-val" id="volVal">80%</span></div>
+      </div>
+      <div class="sec-card">
+        <div class="row-between">
+          <div><div class="row-label">📳 バイブレーション</div><div class="row-sub">アラームと連動して振動</div></div>
+          <button class="sw on" id="vibSw"></button>
+        </div>
+        <div style="height:12px;"></div>
+        <div class="row-between" id="vibPatternRow">
+          <span style="font-size:12px;color:var(--text2);">パターン</span>
+          <div class="vib-seg">
+            <button class="vib-btn on" id="vibShort" onclick="setVibPat('short')">短め</button>
+            <button class="vib-btn" id="vibLong" onclick="setVibPat('long')">長め</button>
+            <button class="vib-btn" id="vibRepeat" onclick="setVibPat('repeat')">繰返</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TIMER EDIT ═══ -->
+  <div class="screen" id="timerEditScreen">
+    <div class="topbar">
+      <button class="topbar-btn" id="timerEditBack">‹ 戻る</button>
+      <div class="topbar-title" id="timerEditTitle">タイマーを追加</div>
+      <button class="topbar-save" id="timerSaveBtn">保存</button>
+    </div>
+    <div class="edit-scroll">
+      <div class="sec-card"><div class="sec-title">時間設定</div>
+        <div class="timer-set-row" style="justify-content:center;">
+          <div class="t-sp-unit"><button class="t-sp-btn" id="teHUp">▲</button><div class="t-sp-val" id="teH">00</div><div class="t-sp-lbl">時間</div><button class="t-sp-btn" id="teHDn">▼</button></div>
+          <div class="t-colon">:</div>
+          <div class="t-sp-unit"><button class="t-sp-btn" id="teMUp">▲</button><div class="t-sp-val" id="teM">05</div><div class="t-sp-lbl">分</div><button class="t-sp-btn" id="teMDn">▼</button></div>
+          <div class="t-colon">:</div>
+          <div class="t-sp-unit"><button class="t-sp-btn" id="teSUp">▲</button><div class="t-sp-val" id="teS">00</div><div class="t-sp-lbl">秒</div><button class="t-sp-btn" id="teSDn">▼</button></div>
+        </div>
+        <div style="height:14px;"></div>
+        <div class="timer-presets">
+          <button class="timer-preset" onclick="timerEditPreset(1,0,0)">1時間</button>
+          <button class="timer-preset" onclick="timerEditPreset(0,30,0)">30分</button>
+          <button class="timer-preset" onclick="timerEditPreset(0,15,0)">15分</button>
+          <button class="timer-preset" onclick="timerEditPreset(0,10,0)">10分</button>
+          <button class="timer-preset" onclick="timerEditPreset(0,5,0)">5分</button>
+          <button class="timer-preset" onclick="timerEditPreset(0,1,0)">1分</button>
+        </div>
+      </div>
+      <div class="sec-card"><div class="sec-title">グループ</div><div class="group-sel-row" id="timerGroupSelRow"></div></div>
+      <div class="sec-card"><div class="sec-title">ラベル</div><input class="lbl-input" id="timerEditLabel" type="text" placeholder="タイマー名（任意）" maxlength="20"></div>
+      <div class="sec-card">
+        <div class="sec-title">アラーム音</div>
+        <button class="sound-btn" id="teSoundBtn"><span>🎵</span><span id="teSoundLabel">デフォルト着信音</span></button>
+        <div style="height:12px;"></div>
+        <div class="sec-title">音量</div>
+        <div class="vol-row"><span class="vol-icon" id="teVolIcon">🔉</span><input type="range" id="teVolSlider" min="0" max="100" value="80"><span class="vol-val" id="teVolVal">80%</span></div>
+      </div>
+      <div class="sec-card">
+        <div class="row-between">
+          <div><div class="row-label">📳 バイブレーション</div><div class="row-sub">タイマー終了時に振動</div></div>
+          <button class="sw on" id="teVibSw"></button>
+        </div>
+        <div style="height:12px;"></div>
+        <div class="row-between" id="teVibPatternRow">
+          <span style="font-size:12px;color:var(--text2);">パターン</span>
+          <div class="vib-seg">
+            <button class="vib-btn on" id="teVibShort"  onclick="setTeVibPat('short')">短め</button>
+            <button class="vib-btn"    id="teVibLong"   onclick="setTeVibPat('long')">長め</button>
+            <button class="vib-btn"    id="teVibRepeat" onclick="setTeVibPat('repeat')">繰返</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GROUP MODAL -->
+  <div class="modal-overlay" id="groupModal">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" id="groupModalTitle">グループを追加</div>
+      <div class="modal-emoji-row" id="emojiRow"></div>
+      <input class="modal-input" id="groupNameInput" type="text" placeholder="グループ名を入力" maxlength="20">
+      <div class="modal-btns">
+        <button class="modal-btn modal-btn-cancel" id="gmCancel">キャンセル</button>
+        <button class="modal-btn modal-btn-ok" id="gmSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM -->
+  <div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-box">
+      <div class="confirm-icon" id="confirmIcon">🗑️</div>
+      <div class="confirm-msg" id="confirmMsg"></div>
+      <div class="confirm-btns">
+        <button class="modal-btn modal-btn-cancel" id="confirmCancel">キャンセル</button>
+        <button class="modal-btn modal-btn-danger" id="confirmOk">削除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════ DATA ═══════════════════
+const EMOJIS=['📁','☀️','🌙','🌤','🌃','⏰','💊','🏃','🎵','🍱','📚','💼','🏋️','🧘','🎮','🌟'];
+const DAY_LABELS=['月','火','水','木','金','土','日'];
+const SOUNDS=['デフォルト着信音','Classic Bell','Digital Buzz','Gentle Rise','Morning Birds'];
+
+let groups=[
+  {id:'g1',name:'朝のルーティン',emoji:'☀️'},
+  {id:'g2',name:'仕事',emoji:'💼'},
+  {id:'g3',name:'夜',emoji:'🌙'},
+];
+let alarms=[
+  {id:'a1',gid:'g1',hour:6,minute:30,label:'ランニング',enabled:true,days:['月','水','金'],snooze:5,sound:'',volume:80,vibration:true,vibPat:'short'},
+  {id:'a2',gid:'g1',hour:7,minute:0,label:'起床',enabled:true,days:[],snooze:10,sound:'',volume:80,vibration:true,vibPat:'short'},
+  {id:'a3',gid:'g2',hour:12,minute:0,label:'昼食・薬',enabled:false,days:['月','火','水','木','金'],snooze:5,sound:'',volume:80,vibration:false,vibPat:'short'},
+  {id:'a4',gid:'g3',hour:22,minute:0,label:'就寝準備',enabled:true,days:['月','火','水','木','金','土','日'],snooze:5,sound:'',volume:80,vibration:true,vibPat:'repeat'},
+];
+// timers: {id, gid, label, totalSec, remainSec, running, interval}
+let timers=[];
+let _gid=10,_aid=10,_tid=1;
+const collapsed={};
+let use12h=false;
+let eTarget=null,eHour=7,eMinute=0,eDays=[],eSnooze=5,eSound='',eGid='',eSoundIdx=0;
+let eVolume=80,eVibration=true,eVibPat='short',eSkipHoliday=false;
+let fabOpen=false,confirmCb=null;
+let gmGid=null,gmEmoji='📁';
+// timer edit state
+let teH=0,teM=5,teS=0,teTarget=null,teGid='';
+let teSound='',teSoundIdx=0,teVolume=80,teVibration=true,teVibPat='short';
+
+// ═══════════════════ DRAG ENGINE ═══════════════════
+const LP_MS=420,LP_MOVE=10;
+let drag={timer:null,active:false,type:null,id:null,sourceEl:null,ghost:null,offX:0,offY:0,startX:0,startY:0,curX:0,curY:0};
+
+function dragStart(e,type,id,sourceEl){
+  if(drag.active||drag.timer)return;
+  const pt=point(e);
+  drag.startX=pt.x;drag.startY=pt.y;
+  sourceEl.classList.add('lp-hint');
+  drag.timer=setTimeout(()=>{
+    drag.timer=null;drag.active=true;drag.type=type;drag.id=id;drag.sourceEl=sourceEl;
+    sourceEl.classList.remove('lp-hint');sourceEl.classList.add('is-dragging');
+    const r=sourceEl.getBoundingClientRect();
+    drag.offX=pt.x-r.left;drag.offY=pt.y-r.top;drag.curX=pt.x;drag.curY=pt.y;
+    const g=sourceEl.cloneNode(true);
+    g.className=sourceEl.className.replace('is-dragging','')+' drag-ghost';
+    g.style.width=r.width+'px';g.style.height=r.height+'px';
+    posG(g,pt.x,pt.y);document.body.appendChild(g);drag.ghost=g;
+    if(navigator.vibrate)navigator.vibrate(45);
+    document.body.style.overflow='hidden';updateUI();
+  },LP_MS);
+}
+function posG(g,x,y){g.style.left=(x-drag.offX)+'px';g.style.top=(y-drag.offY)+'px';}
+function dragMove(e){
+  const pt=point(e);
+  if(!drag.active){
+    if(drag.timer&&(Math.abs(pt.x-drag.startX)>LP_MOVE||Math.abs(pt.y-drag.startY)>LP_MOVE))cancelLP();
+    return;
+  }
+  e.preventDefault();drag.curX=pt.x;drag.curY=pt.y;
+  if(drag.ghost)posG(drag.ghost,pt.x,pt.y);updateUI();
+}
+function dragEnd(e){
+  cancelLP();if(!drag.active){resetDrag();return;}
+  // commit はプレースホルダーが DOM にある状態で呼ぶ
+  commitFromPh();
+  resetDrag();
+  render();
+}
+function cancelLP(){
+  if(drag.timer){clearTimeout(drag.timer);drag.timer=null;}
+  if(drag.sourceEl)drag.sourceEl.classList.remove('lp-hint');
+}
+function resetDrag(){
+  if(drag.ghost){drag.ghost.remove();drag.ghost=null;}
+  if(drag.sourceEl)drag.sourceEl.classList.remove('is-dragging','lp-hint');
+  drag.active=false;drag.type=null;drag.id=null;drag.sourceEl=null;
+  document.body.style.overflow='';clearPh();
+}
+function point(e){const t=e.changedTouches?.[0]??e.touches?.[0]??e;return{x:t.clientX,y:t.clientY};}
+function getGroupRects(){
+  // group-header のみの rect を使う（group-items の高さを含めない）
+  return [...document.querySelectorAll('#alarmList .group-wrap')].map(el=>{
+    const hdr=el.querySelector('.group-header');
+    return {el, gid:el.dataset.gid, r:(hdr||el).getBoundingClientRect()};
+  });
+}
+function getAlarmRects(gid){
+  const sel=gid?`#alarmList .group-wrap[data-gid="${gid}"] .alarm-card`:'#alarmList .alarm-card';
+  return[...document.querySelectorAll(sel)].filter(el=>el.dataset.aid!==drag.id).map(el=>({el,aid:el.dataset.aid,r:el.getBoundingClientRect()}));
+}
+function getItemsEl(gid){return document.querySelector(`#alarmList .group-wrap[data-gid="${gid}"] .group-items`);}
+function getHeaderEl(gid){return document.querySelector(`#alarmList .group-wrap[data-gid="${gid}"] .group-header`);}
+function findHoveredGroup(x,y){
+  // wrap 全体の rect で判定（アイテムエリアも含む、ドロップ先としては wrap 全域を使う）
+  for(const el of document.querySelectorAll('#alarmList .group-wrap')){
+    const r=el.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)
+      return{el,gid:el.dataset.gid,r};
+  }
+  return null;
+}
+function findGroupInsert(y){
+  // ヘッダーのみの rect で並び替え位置を判定（タイマーカードに引っかからないように）
+  const rects=getGroupRects().filter(g=>g.gid!==drag.id);
+  for(const{el,gid,r}of rects)if(y<r.top+r.height/2)return{el,gid,before:true};
+  const last=rects[rects.length-1];if(last)return{el:last.el,gid:last.gid,before:false};return null;
+}
+function clearPh(){
+  document.querySelectorAll('.ph-alarm,.ph-group,.ph-timer').forEach(e=>e.remove());
+  document.querySelectorAll('.drop-here,.drop-zone').forEach(e=>e.classList.remove('drop-here','drop-zone'));
+}
+
+// すべてのタイマーカード（グループ内含む）を取得
+function getAllTimerCards(){
+  return [...document.querySelectorAll('.timer-card')].filter(c=>c.dataset.tid!==drag.id);
+}
+// タイマーカードが属する group-items と gid を取得
+function timerCardContainer(card){
+  const items=card.closest('.group-items');
+  if(items)return{container:items,gid:items.dataset.gid};
+  return{container:document.getElementById('timerList'),gid:''};
+}
+// Y座標・X座標からタイマー挿入情報を取得（ホバーグループ優先、全カード混在スキャン）
+function findTimerInsert(x,y){
+  // まずカーソルが乗っているグループを特定
+  const hov=findHoveredGroup(x,y);
+  const targetGid=hov?hov.gid:'';
+  const targetItems=targetGid?getItemsEl(targetGid):document.getElementById('timerList');
+
+  // そのグループ内の全カード（alarm-card + timer-card）をY座標でスキャン
+  const allCards=targetItems
+    ?[...targetItems.querySelectorAll('.alarm-card,.timer-card')].filter(c=>c.dataset.tid!==drag.id)
+    :[];
+  for(const c of allCards){
+    const r=c.getBoundingClientRect();
+    if(y<r.top+r.height/2)return{beforeEl:c,container:targetItems||document.getElementById('timerList'),gid:targetGid};
+  }
+  return{beforeEl:null,container:targetItems||document.getElementById('timerList'),gid:targetGid};
+}
+
+function updateUI(){
+  clearPh();if(!drag.active)return;
+  const x=drag.curX,y=drag.curY;
+  if(drag.type==='group'){
+    const ins=findGroupInsert(y);if(!ins)return;
+    const ph=document.createElement('div');ph.className='ph-group';
+    if(ins.before)ins.el.parentNode.insertBefore(ph,ins.el);else ins.el.parentNode.insertBefore(ph,ins.el.nextSibling);
+  } else if(drag.type==='timer'){
+    const ins=findTimerInsert(x,y);
+    const ph=document.createElement('div');ph.className='ph-alarm ph-timer';
+    if(ins.beforeEl)ins.container.insertBefore(ph,ins.beforeEl);
+    else ins.container.appendChild(ph);
+    // ドロップ先グループをハイライト
+    if(ins.gid){
+      const hdr=getHeaderEl(ins.gid);const items=getItemsEl(ins.gid);
+      if(items)items.classList.add('drop-zone');
+      if(hdr)hdr.classList.add('drop-here');
+    }
+  } else {
+    // alarm drag — タイマーカードも含む全カードで挿入位置を決める
+    const hov=findHoveredGroup(x,y);if(!hov)return;
+    const hdr=getHeaderEl(hov.gid),items=getItemsEl(hov.gid);if(!items)return;
+    items.classList.add('drop-zone');if(hdr)hdr.classList.add('drop-here');
+    const ph=document.createElement('div');ph.className='ph-alarm';
+    const allCards=[...items.querySelectorAll('.alarm-card,.timer-card')]
+      .filter(c=>c.dataset.aid!==drag.id);
+    let inserted=false;
+    for(const c of allCards){
+      const r=c.getBoundingClientRect();
+      if(y<r.top+r.height/2){items.insertBefore(ph,c);inserted=true;break;}
+    }
+    if(!inserted)items.appendChild(ph);
+  }
+}
+
+// ─── commit: プレースホルダーのDOM位置から挿入順を確定 ───
+function commitFromPh(){
+
+  if(drag.type==='group'){
+    const ph=document.querySelector('.ph-group');
+    if(!ph)return;
+    const fromIdx=groups.findIndex(g=>g.id===drag.id);if(fromIdx<0)return;
+    const[moved]=groups.splice(fromIdx,1);
+    let sib=ph.nextElementSibling;
+    while(sib&&!sib.classList.contains('group-wrap'))sib=sib.nextElementSibling;
+    if(sib){
+      const toIdx=groups.findIndex(g=>g.id===sib.dataset.gid);
+      groups.splice(toIdx>=0?toIdx:groups.length,0,moved);
+    }else{groups.push(moved);}
+    return;
+  }
+
+  // アラーム・タイマー共通
+  const phSel=drag.type==='timer'?'.ph-timer':'.ph-alarm:not(.ph-timer)';
+  const ph=document.querySelector(phSel);
+  if(!ph)return;
+
+  const container=ph.parentElement;
+  const newGid=container?.dataset?.gid||'';
+
+  // ph の次のカード（alarm or timer）を基準とする
+  let refEl=null;
+  let sib=ph.nextElementSibling;
+  while(sib){
+    if(sib.classList.contains('alarm-card')||sib.classList.contains('timer-card')){refEl=sib;break;}
+    sib=sib.nextElementSibling;
+  }
+
+  if(drag.type==='timer'){
+    const t=timers.find(x=>x.id===drag.id);if(!t)return;
+    const oldGid=t.gid;
+    t.gid=newGid;
+    // 古いグループの順序から除去
+    if(groupOrder[oldGid])groupOrder[oldGid]=groupOrder[oldGid].filter(o=>o.id!==drag.id);
+    // 新グループの順序に挿入
+    updateGroupOrderFromPh(newGid,'timer',drag.id,refEl);
+  } else {
+    const alarm=alarms.find(a=>a.id===drag.id);if(!alarm)return;
+    const oldGid=alarm.gid;
+    alarm.gid=newGid;
+    // 古いグループの順序から除去
+    if(groupOrder[oldGid])groupOrder[oldGid]=groupOrder[oldGid].filter(o=>o.id!==drag.id);
+    // 新グループの順序に挿入
+    updateGroupOrderFromPh(newGid,'alarm',drag.id,refEl);
+  }
+}
+document.addEventListener('pointermove',e=>{if(drag.active||drag.timer)dragMove(e);},{passive:false});
+document.addEventListener('pointerup',e=>{if(drag.active||drag.timer)dragEnd(e);});
+document.addEventListener('pointercancel',()=>{cancelLP();resetDrag();render();});
+
+// ═══════════════════ UTILS ═══════════════════
+function fmt(n){return String(n).padStart(2,'0');}
+function fmtSec(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h>0?`${fmt(h)}:${fmt(m)}:${fmt(sec)}`:`${fmt(m)}:${fmt(sec)}`;}
+function escH(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function grpById(id){return groups.find(g=>g.id===id);}
+function mk(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+
+// タイマーカードのサブテキスト：再生中/一時停止中は鳴動予定時刻、未開始は合計時間
+function fmtTimerSub(t){
+  const finished=t.remainSec<=0&&t._started&&t.totalSec>0;
+  if(finished)return '終了';
+  if(t.running||(!finished&&t._started&&t.remainSec<t.totalSec)){
+    // 残り秒から鳴動時刻を計算
+    const ring=new Date(Date.now()+t.remainSec*1000);
+    const h24=ring.getHours(),m=ring.getMinutes();
+    if(use12h){
+      const ampm=h24<12?'AM':'PM';
+      const h12=h24%12||12;
+      return `🔔 ${ampm} ${fmt(h12)}:${fmt(m)}`;
+    }
+    return `🔔 ${fmt(h24)}:${fmt(m)}`;
+  }
+  return `合計 ${fmtSec(t.totalSec)}`;
+}
+
+// ═══════════════════ 日本の祝日データ ═══════════════════
+// 固定祝日・移動祝日・振替休日・挟まれ休日を網羅
+// 春分・秋分は天文計算で算出
+
+function calcVernalEquinox(y){
+  // 近似式（1980〜2099年対応）
+  if(y<=2099) return Math.floor(20.8431+0.242194*(y-1980)-Math.floor((y-1980)/4));
+  return 20;
+}
+function calcAutumnalEquinox(y){
+  if(y<=2099) return Math.floor(23.2488+0.242194*(y-1980)-Math.floor((y-1980)/4));
+  return 23;
+}
+// 「ハッピーマンデー」系（第N月曜日）
+function nthMonday(y,m,n){
+  const d=new Date(y,m-1,1);
+  const first=d.getDay(); // 0=日
+  const offset=(1-first+7)%7; // 最初の月曜までの日数
+  return offset+1+(n-1)*7;
+}
+
+// 指定年の祝日セットを "YYYY-MM-DD" で返す
+function getJapaneseHolidays(y){
+  const h=new Set();
+  const add=(m,d)=>h.add(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+
+  // 固定祝日
+  add(1,1);   // 元日
+  add(2,11);  // 建国記念の日
+  add(2,23);  // 天皇誕生日
+  add(4,29);  // 昭和の日
+  add(5,3);   // 憲法記念日
+  add(5,4);   // みどりの日
+  add(5,5);   // こどもの日
+  add(8,11);  // 山の日
+  add(11,3);  // 文化の日
+  add(11,23); // 勤労感謝の日
+
+  // 春分・秋分
+  add(3, calcVernalEquinox(y));
+  add(9, calcAutumnalEquinox(y));
+
+  // ハッピーマンデー
+  add(1, nthMonday(y,1,2));  // 成人の日（第2月曜）
+  add(7, nthMonday(y,7,3));  // 海の日（第3月曜）
+  add(9, nthMonday(y,9,3));  // 敬老の日（第3月曜）
+  add(10,nthMonday(y,10,2)); // スポーツの日（第2月曜）
+
+  // 振替休日（祝日が日曜 → 翌月曜）
+  const base=[...h];
+  base.forEach(ds=>{
+    const dt=new Date(ds);
+    if(dt.getDay()===0){ // 日曜
+      const next=new Date(dt);next.setDate(dt.getDate()+1);
+      h.add(next.toISOString().slice(0,10));
+    }
+  });
+
+  // 挟まれ休日（祝日と祝日に挟まれた平日）
+  for(let m=1;m<=12;m++){
+    const days=new Date(y,m,0).getDate();
+    for(let d=2;d<days;d++){
+      const prev=`${y}-${String(m).padStart(2,'0')}-${String(d-1).padStart(2,'0')}`;
+      const curr=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const next=`${y}-${String(m).padStart(2,'0')}-${String(d+1).padStart(2,'0')}`;
+      const dt=new Date(curr);
+      if(h.has(prev)&&h.has(next)&&dt.getDay()!==0&&dt.getDay()!==6&&!h.has(curr)){
+        h.add(curr);
+      }
+    }
+  }
+
+  return h;
+}
+
+// 祝日キャッシュ
+const _holidayCache={};
+function isJapaneseHoliday(date){
+  const y=date.getFullYear();
+  if(!_holidayCache[y])_holidayCache[y]=getJapaneseHolidays(y);
+  const key=date.toISOString().slice(0,10);
+  return _holidayCache[y].has(key);
+}
+
+// 今日が祝日かどうかをホーム画面のアラームカードに反映するために参照
+function todayIsHoliday(){
+  return isJapaneseHoliday(new Date());
+}
+function showConfirm(icon,html,cb){
+  confirmCb=cb;
+  document.getElementById('confirmIcon').textContent=icon;
+  document.getElementById('confirmMsg').innerHTML=html;
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+document.getElementById('confirmCancel').onclick=()=>{document.getElementById('confirmOverlay').classList.remove('open');confirmCb=null;};
+document.getElementById('confirmOk').onclick=()=>{document.getElementById('confirmOverlay').classList.remove('open');if(confirmCb){confirmCb();confirmCb=null;}};
+
+// ═══════════════════ 12H TOGGLE ═══════════════════
+function toggleHourMode(){
+  use12h=!use12h;
+  document.getElementById('hToggleBtn').textContent=use12h?'12h':'24h';
+  render();
+  // 編集画面が開いているときも追随
+  updEditAmpm();
+  updSpinners();
+}
+
+// ═══════════════════ RENDER ═══════════════════
+// グループ内表示順を管理: groupOrder[gid] = [{type,id}, ...]
+// アラーム/タイマー追加・移動時に更新される
+const groupOrder={};
+
+// gid の順序配列を取得（なければ alarms→timers の初期順で生成）
+function getGroupOrder(gid){
+  if(!groupOrder[gid]){
+    groupOrder[gid]=[];
+    alarms.forEach(a=>{if(a.gid===gid)groupOrder[gid].push({type:'alarm',id:a.id});});
+    timers.forEach(t=>{if(t.gid===gid)groupOrder[gid].push({type:'timer',id:t.id});});
+  }
+  // 存在しなくなったアイテムを除去、新しいアイテムを末尾追加
+  groupOrder[gid]=groupOrder[gid].filter(o=>{
+    if(o.type==='alarm')return alarms.some(a=>a.id===o.id&&a.gid===gid);
+    return timers.some(t=>t.id===o.id&&t.gid===gid);
+  });
+  alarms.forEach(a=>{if(a.gid===gid&&!groupOrder[gid].some(o=>o.id===a.id))groupOrder[gid].push({type:'alarm',id:a.id});});
+  timers.forEach(t=>{if(t.gid===gid&&!groupOrder[gid].some(o=>o.id===t.id))groupOrder[gid].push({type:'timer',id:t.id});});
+  return groupOrder[gid];
+}
+
+// ドロップ確定時: DOM上のph位置から groupOrder を更新する
+function updateGroupOrderFromPh(gid,movedType,movedId,refEl){
+  if(!groupOrder[gid])groupOrder[gid]=[];
+  // 移動アイテムを一旦除去
+  groupOrder[gid]=groupOrder[gid].filter(o=>o.id!==movedId);
+  const item={type:movedType,id:movedId};
+  if(!refEl){
+    groupOrder[gid].push(item);
+  } else {
+    const refId=refEl.dataset.aid||refEl.dataset.tid;
+    const refIdx=groupOrder[gid].findIndex(o=>o.id===refId);
+    if(refIdx>=0)groupOrder[gid].splice(refIdx,0,item);
+    else groupOrder[gid].push(item);
+  }
+}
+
+function _renderCore(){
+  const list=document.getElementById('alarmList');
+  list.innerHTML='';
+  document.getElementById('timerList').innerHTML='';
+  const hasContent=alarms.length>0||groups.length>0||timers.length>0;
+  document.getElementById('emptyState').style.display=hasContent?'none':'flex';
+
+  groups.forEach(g=>{
+    const gAlarms=alarms.filter(a=>a.gid===g.id);
+    const wrap=mk('div','group-wrap');wrap.dataset.gid=g.id;
+    const hdr=mk('div','group-header'+(collapsed[g.id]?' collapsed':''));
+    const handle=mk('div','g-handle','⠿');handle.title='長押しで移動';
+    handle.addEventListener('pointerdown',e=>{e.stopPropagation();dragStart(e,'group',g.id,hdr);});
+    hdr.appendChild(handle);
+    const gap=mk('div','g-handle-gap');hdr.appendChild(gap);
+    const emojiBtn=mk('button','g-emoji-btn',g.emoji);emojiBtn.title='長押しで編集';
+    attachLPEdit(emojiBtn,g.id);hdr.appendChild(emojiBtn);
+    const nameSpan=mk('span','g-name',g.name);nameSpan.title='長押しで編集';
+    attachLPEdit(nameSpan,g.id);hdr.appendChild(nameSpan);
+    const right=mk('div','g-right');
+    const gTimerCount=timers.filter(t=>t.gid===g.id).length;
+    const totalCount=gAlarms.length+gTimerCount;
+    right.appendChild(mk('span','g-count',`${totalCount}件`));
+    const delBtn=mk('button','g-del','🗑️');
+    delBtn.addEventListener('click',e=>{e.stopPropagation();showConfirm('🗑️',`グループ <strong>「${escH(g.name)}」</strong> を削除しますか？<small>アラームはグループなしに移動します</small>`,()=>{groups=groups.filter(x=>x.id!==g.id);alarms.forEach(a=>{if(a.gid===g.id)a.gid='';});timers.forEach(t=>{if(t.gid===g.id)t.gid='';});render();});});
+    right.appendChild(delBtn);
+    right.appendChild(mk('span','g-chevron','›'));
+    hdr.appendChild(right);
+    hdr.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.g-handle,.g-emoji-btn,.g-name,.g-del'))return;collapsed[g.id]=!collapsed[g.id];render();});
+    wrap.appendChild(hdr);
+
+    // アラーム・タイマーを混在描画（配列の登場順）
+    const items=mk('div','group-items'+(collapsed[g.id]?' collapsed':''));items.dataset.gid=g.id;
+    getGroupOrder(g.id).forEach(item=>{
+      if(item.type==='alarm'){
+        const a=alarms.find(x=>x.id===item.id);
+        if(a)items.appendChild(makeAlarmCard(a));
+      } else {
+        const t=timers.find(x=>x.id===item.id);
+        if(t)items.appendChild(makeTimerCard(t));
+      }
+    });
+    wrap.appendChild(items);list.appendChild(wrap);
+  });
+
+  const orphanAlarms=alarms.filter(a=>!groups.find(g=>g.id===a.gid));
+  const orphanTimers=timers.filter(t=>!t.gid||!groups.find(g=>g.id===t.gid));
+  if(orphanAlarms.length||orphanTimers.length){
+    const lbl=mk('div',null,'グループなし');lbl.style.cssText='padding:10px 0 4px;font-size:11px;color:var(--text2);font-weight:600;';
+    document.getElementById('timerList').appendChild(lbl);
+    orphanAlarms.forEach(a=>document.getElementById('timerList').appendChild(makeAlarmCard(a)));
+    orphanTimers.forEach(t=>document.getElementById('timerList').appendChild(makeTimerCard(t)));
+  }
+}
+
+// ═══════════════════ ALARM CARD ═══════════════════
+function makeAlarmCard(alarm){
+  const card=mk('div','alarm-card'+(alarm.enabled?'':' disabled'));
+  card.dataset.aid=alarm.id;
+  card.addEventListener('pointerdown',e=>{if(e.target.closest('.a-del,.toggle'))return;dragStart(e,'alarm',alarm.id,card);});
+
+  // AM/PM 縦バッジ（12hモード時のみ）
+  if(use12h){
+    const isAM=alarm.hour<12;
+    const col=mk('div','ampm-col');
+    const top=mk('span','ampm-top'+(isAM?' active':''),'AM');
+    const bot=mk('span','ampm-bot'+((!isAM)?' active':''),'PM');
+    col.appendChild(top);col.appendChild(bot);
+    card.appendChild(col);
+  }
+
+  // 時刻表示
+  let timeStr;
+  if(use12h){const h=alarm.hour%12||12;timeStr=`${fmt(h)}:${fmt(alarm.minute)}`;}
+  else timeStr=`${fmt(alarm.hour)}:${fmt(alarm.minute)}`;
+  card.appendChild(mk('div','alarm-time',timeStr));
+
+  const meta=mk('div','alarm-meta');
+  meta.appendChild(mk('div','alarm-lbl',alarm.label||'アラーム'));
+  meta.appendChild(mk('div','alarm-days',
+    (alarm.days.length?alarm.days.join('・'):'一回のみ')
+    +(alarm.skipHoliday?' 🎌除外':'')
+    +(alarm.skipHoliday&&todayIsHoliday()?' (今日はスキップ)':'')));
+  card.appendChild(meta);
+  const actions=mk('div','alarm-actions');
+  const del=mk('button','a-del','🗑️');
+  del.addEventListener('click',e=>{e.stopPropagation();showConfirm('🗑️',`アラーム <strong>「${escH(alarm.label||'アラーム')} ${fmt(alarm.hour)}:${fmt(alarm.minute)}」</strong> を削除しますか？`,()=>{alarms=alarms.filter(a=>a.id!==alarm.id);render();});});
+  actions.appendChild(del);
+  const tog=mk('button','toggle'+(alarm.enabled?' on':''));
+  tog.addEventListener('click',e=>{e.stopPropagation();alarm.enabled=!alarm.enabled;render();});
+  actions.appendChild(tog);card.appendChild(actions);
+  card.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.a-del,.toggle'))return;openEdit(alarm);});
+  return card;
+}
+
+// ═══════════════════ TIMER LIST ═══════════════════
+function renderTimerList(){
+  const tlist=document.getElementById('timerList');
+  tlist.innerHTML='';
+  if(!timers.length)return;
+
+  // グループに属するタイマーはそのグループ内の items に追加
+  // → render() で alarmList に描画済みのグループに注入
+  groups.forEach(g=>{
+    const gTimers=timers.filter(t=>t.gid===g.id);
+    if(!gTimers.length)return;
+    const itemsEl=document.querySelector(`#alarmList .group-wrap[data-gid="${g.id}"] .group-items`);
+    if(itemsEl)gTimers.forEach(t=>itemsEl.appendChild(makeTimerCard(t)));
+  });
+
+  // グループなし（gid未設定 or グループ削除済み）
+  const orphans=timers.filter(t=>!t.gid||!groups.find(g=>g.id===t.gid));
+  if(!orphans.length)return;
+  orphans.forEach(t=>tlist.appendChild(makeTimerCard(t)));
+}
+
+function makeTimerCard(t){
+  const finished=t.remainSec<=0&&t._started&&t.totalSec>0;
+  let cls='timer-card';
+  if(t.running)cls+=' tc-running';
+  else if(finished)cls+=' tc-finished';
+  const card=mk('div',cls);card.dataset.tid=t.id;
+
+  // 長押しでドラッグ（グループ間移動）
+  card.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.tc-btn,.tc-del'))return;
+    e.stopPropagation(); // group-header へのバブルを防ぐ
+    dragStart(e,'timer',t.id,card);
+  });
+
+  // ⏱ アイコン（時刻の左）
+  const icon=mk('div','tc-icon'+(t.running?' tc-running':''),'⏱');
+  card.appendChild(icon);
+
+  // 残り時間
+  const timeEl=mk('div','tc-time'+(t.running?' tc-running':finished?' tc-finished':''),fmtSec(t.remainSec));
+  card.appendChild(timeEl);
+
+  // メタ
+  const meta=mk('div','tc-meta');
+  meta.appendChild(mk('div','tc-name',t.label||'タイマー'));
+  // 鳴動時刻（再生中・一時停止中）または合計時間（未開始）
+  const subEl=mk('div','tc-total');
+  subEl.textContent=fmtTimerSub(t);
+  meta.appendChild(subEl);
+  card.appendChild(meta);
+
+  const actions=mk('div','tc-actions');
+
+  // ■ 停止＆リセットボタン
+  if(t.running||(!finished&&t.remainSec<t.totalSec&&t._started)){
+    const stopBtn=mk('button','tc-btn tc-stop','■');
+    stopBtn.title='停止してリセット';
+    stopBtn.addEventListener('click',e=>{e.stopPropagation();timerReset(t.id);});
+    actions.appendChild(stopBtn);
+  }
+
+  // 🗑 削除（▶の前）
+  const del=mk('button','tc-del','🗑️');
+  del.addEventListener('click',e=>{
+    e.stopPropagation();
+    showConfirm('🗑️',`タイマー <strong>「${escH(t.label||'タイマー')}」</strong> を削除しますか？`,
+      ()=>{timerStop(t.id);timers=timers.filter(x=>x.id!==t.id);render();});
+  });
+  actions.appendChild(del);
+
+  // ▶ / ⏸ / ↺ ボタン
+  let playIcon,playCls;
+  if(finished){playIcon='↺';playCls='tc-btn tc-play-restart';}
+  else if(t.running){playIcon='⏸';playCls='tc-btn tc-play-pause';}
+  else{playIcon='▶';playCls='tc-btn tc-play-run';}
+  const playBtn=mk('button',playCls,playIcon);
+  playBtn.addEventListener('click',e=>{e.stopPropagation();timerCardToggle(t.id);});
+  actions.appendChild(playBtn);
+  card.appendChild(actions);
+
+  // タップで編集（ドラッグ中・ボタン以外）
+  card.addEventListener('click',e=>{
+    if(drag.active)return;
+    if(e.target.closest('.tc-btn,.tc-del'))return;
+    openTimerEdit(t);
+  });
+  return card;
+}
+
+// ═══════════════════ TIMER LOGIC ═══════════════════
+
+// 既存カードのDOMを直接更新（再描画なし）
+function tickTimerCard(tid){
+  const t=timers.find(x=>x.id===tid);if(!t)return;
+  const card=document.querySelector(`.timer-card[data-tid="${tid}"]`);if(!card)return;
+  const finished=t.remainSec<=0&&t._started&&t.totalSec>0;
+
+  // クラス更新
+  card.classList.toggle('tc-running',t.running);
+  card.classList.toggle('tc-finished',finished);
+
+  // アイコン更新
+  const icon=card.querySelector('.tc-icon');
+  if(icon)icon.className='tc-icon'+(t.running?' tc-running':'');
+
+  // 残り時間テキスト更新
+  const timeEl=card.querySelector('.tc-time');
+  if(timeEl){
+    timeEl.textContent=fmtSec(t.remainSec);
+    timeEl.className='tc-time'+(t.running?' tc-running':finished?' tc-finished':'');
+  }
+
+  // サブテキスト（鳴動時刻 or 合計時間）更新
+  const subEl=card.querySelector('.tc-total');
+  if(subEl)subEl.textContent=fmtTimerSub(t);
+
+  // ボタン類を再生成（状態変化時のみ）
+  const actions=card.querySelector('.tc-actions');
+  if(actions){
+    actions.innerHTML='';
+    // ■ リセットボタン
+    if(t.running||(!finished&&t.remainSec<t.totalSec&&t._started)){
+      const s=mk('button','tc-btn tc-stop','■');
+      s.title='停止してリセット';
+      s.addEventListener('click',e=>{e.stopPropagation();timerReset(tid);});
+      actions.appendChild(s);
+    }
+    // 🗑（▶の前）
+    const del=mk('button','tc-del','🗑️');
+    del.addEventListener('click',e=>{
+      e.stopPropagation();
+      showConfirm('🗑️',`タイマー <strong>「${escH(t.label||'タイマー')}」</strong> を削除しますか？`,
+        ()=>{timerStop(tid);timers=timers.filter(x=>x.id!==tid);render();});
+    });
+    actions.appendChild(del);
+    // ▶/⏸/↺
+    let icon2,cls2;
+    if(finished){icon2='↺';cls2='tc-btn tc-play-restart';}
+    else if(t.running){icon2='⏸';cls2='tc-btn tc-play-pause';}
+    else{icon2='▶';cls2='tc-btn tc-play-run';}
+    const pb=mk('button',cls2,icon2);
+    pb.addEventListener('click',e=>{e.stopPropagation();timerCardToggle(tid);});
+    actions.appendChild(pb);
+  }
+}
+
+function timerCardToggle(tid){
+  const t=timers.find(x=>x.id===tid);if(!t)return;
+  const finished=t.remainSec<=0&&t._started&&t.totalSec>0;
+  if(finished){
+    t.remainSec=t.totalSec;t._started=false;timerStop(tid);
+    tickTimerCard(tid); // リセット後に表示更新
+  } else if(t.running){
+    timerStop(tid);
+    tickTimerCard(tid); // 一時停止後に表示更新
+  } else {
+    if(t.remainSec===0)t.remainSec=t.totalSec;
+    t._started=true;t.running=true;
+    tickTimerCard(tid); // 再生開始直後に表示更新
+    t.interval=setInterval(()=>{
+      t.remainSec--;
+      if(t.remainSec<=0){
+        t.remainSec=0;timerStop(tid);t._started=true;
+        fireTimerNotification(t);
+      }
+      tickTimerCard(tid); // 毎秒：カードのみ更新（再描画なし）
+    },1000);
+  }
+}
+function timerStop(tid){
+  const t=timers.find(x=>x.id===tid);if(!t)return;
+  if(t.interval){clearInterval(t.interval);t.interval=null;}
+  t.running=false;
+}
+function timerReset(tid){
+  const t=timers.find(x=>x.id===tid);if(!t)return;
+  timerStop(tid);
+  t.remainSec=t.totalSec;t._started=false;
+  tickTimerCard(tid);
+}
+
+// ═══════════════════ TIMER EDIT ═══════════════════
+function openTimerNew(){
+  teTarget=null;teH=0;teM=5;teS=0;teGid=groups[0]?.id??'';
+  teSound='';teSoundIdx=0;teVolume=80;teVibration=true;teVibPat='short';
+  document.getElementById('timerEditTitle').textContent='タイマーを追加';
+  document.getElementById('timerEditLabel').value='';
+  updTeSpinners();renderTimerGroupSel();updTeVolUI();updTeVibUI();updTeSoundUI();
+  document.getElementById('listScreen').classList.remove('active');
+  document.getElementById('timerEditScreen').classList.add('active');
+}
+function openTimerEdit(t){
+  teTarget=t;
+  const h=Math.floor(t.totalSec/3600),m=Math.floor((t.totalSec%3600)/60),s=t.totalSec%60;
+  teH=h;teM=m;teS=s;teGid=t.gid??'';
+  teSound=t.sound??'';teSoundIdx=0;teVolume=t.volume??80;teVibration=t.vibration??true;teVibPat=t.vibPat??'short';
+  document.getElementById('timerEditTitle').textContent='タイマーを編集';
+  document.getElementById('timerEditLabel').value=t.label||'';
+  updTeSpinners();renderTimerGroupSel();updTeVolUI();updTeVibUI();updTeSoundUI();
+  document.getElementById('listScreen').classList.remove('active');
+  document.getElementById('timerEditScreen').classList.add('active');
+}
+function closeTimerEdit(){
+  document.getElementById('timerEditScreen').classList.remove('active');
+  document.getElementById('listScreen').classList.add('active');
+}
+function saveTimer(){
+  const label=document.getElementById('timerEditLabel').value.trim();
+  const total=teH*3600+teM*60+teS;
+  if(total===0)return;
+  if(teTarget){
+    teTarget.label=label;teTarget.totalSec=total;teTarget.gid=teGid;
+    teTarget.sound=teSound;teTarget.volume=teVolume;teTarget.vibration=teVibration;teTarget.vibPat=teVibPat;
+    if(!teTarget.running)teTarget.remainSec=total;
+  }else{
+    timers.push({id:'t'+(++_tid),gid:teGid,label,totalSec:total,remainSec:total,
+      sound:teSound,volume:teVolume,vibration:teVibration,vibPat:teVibPat,
+      running:false,interval:null,_started:false});
+  }
+  render();closeTimerEdit();
+}
+function renderTimerGroupSel(){
+  const row=document.getElementById('timerGroupSelRow');row.innerHTML='';
+  if(!groups.length){row.innerHTML='<span style="font-size:12px;color:var(--text2)">グループがありません</span>';return;}
+  groups.forEach(g=>{
+    const ch=mk('button','group-chip'+(g.id===teGid?' selected':''),`${g.emoji} ${g.name}`);
+    ch.addEventListener('click',()=>{teGid=g.id;renderTimerGroupSel();});
+    row.appendChild(ch);
+  });
+}
+function timerEditPreset(h,m,s){teH=h;teM=m;teS=s;updTeSpinners();}
+function chTe(f,d){
+  if(f==='h')teH=Math.max(0,Math.min(23,teH+d));
+  else if(f==='m')teM=Math.max(0,Math.min(59,teM+d));
+  else teS=Math.max(0,Math.min(59,teS+d));
+  updTeSpinners();
+}
+function updTeSpinners(){
+  document.getElementById('teH').textContent=fmt(teH);
+  document.getElementById('teM').textContent=fmt(teM);
+  document.getElementById('teS').textContent=fmt(teS);
+}
+document.getElementById('timerEditBack').addEventListener('click',closeTimerEdit);
+document.getElementById('timerSaveBtn').addEventListener('click',saveTimer);
+[['teHUp','h',1],['teHDn','h',-1],['teMUp','m',1],['teMDn','m',-1],['teSUp','s',1],['teSDn','s',-1]]
+  .forEach(([id,f,d])=>document.getElementById(id).addEventListener('click',()=>chTe(f,d)));
+
+// ── タイマー編集 音量 ──
+function updTeVolUI(){
+  const v=teVolume;
+  document.getElementById('teVolSlider').value=v;
+  document.getElementById('teVolVal').textContent=v+'%';
+  document.getElementById('teVolIcon').textContent=v===0?'🔇':v<40?'🔈':v<80?'🔉':'🔊';
+}
+document.getElementById('teVolSlider').addEventListener('input',e=>{teVolume=parseInt(e.target.value);updTeVolUI();});
+
+// ── タイマー編集 アラーム音 ──
+function updTeSoundUI(){
+  document.getElementById('teSoundLabel').textContent=teSound||'デフォルト着信音';
+  document.getElementById('teSoundBtn').classList.toggle('on',!!teSound);
+}
+function cycleTeSnd(){
+  teSoundIdx=(teSoundIdx+1)%SOUNDS.length;
+  teSound=teSoundIdx===0?'':SOUNDS[teSoundIdx];
+  updTeSoundUI();
+}
+document.getElementById('teSoundBtn').addEventListener('click',cycleTeSnd);
+
+// ── タイマー編集 バイブレーション ──
+function updTeVibUI(){
+  document.getElementById('teVibSw').classList.toggle('on',teVibration);
+  document.getElementById('teVibPatternRow').style.opacity=teVibration?'1':'0.35';
+  document.getElementById('teVibPatternRow').style.pointerEvents=teVibration?'auto':'none';
+  ['short','long','repeat'].forEach(p=>{
+    const id='teVib'+p.charAt(0).toUpperCase()+p.slice(1);
+    document.getElementById(id).classList.toggle('on',teVibPat===p);
+  });
+}
+function setTeVibPat(p){teVibPat=p;updTeVibUI();}
+document.getElementById('teVibSw').addEventListener('click',()=>{teVibration=!teVibration;updTeVibUI();});
+
+// ═══════════════════ LONG PRESS EDIT (group name/emoji) ═══════════════════
+const EDIT_LP_MS=500;
+function attachLPEdit(el,gid){
+  let t=null;
+  el.addEventListener('pointerdown',e=>{
+    el.classList.add('lp-hint');
+    t=setTimeout(()=>{t=null;el.classList.remove('lp-hint');openGroupModal(gid);},EDIT_LP_MS);
+  });
+  ['pointermove','pointerup','pointercancel'].forEach(ev=>el.addEventListener(ev,()=>{if(t){clearTimeout(t);t=null;}el.classList.remove('lp-hint');}));
+  el.addEventListener('click',e=>e.stopPropagation());
+}
+
+// ═══════════════════ GROUP MODAL ═══════════════════
+function openGroupModal(gid){
+  gmGid=gid;const g=gid?grpById(gid):null;gmEmoji=g?.emoji??'📁';
+  document.getElementById('groupModalTitle').textContent=gid?'グループを編集':'グループを追加';
+  document.getElementById('groupNameInput').value=g?.name??'';
+  renderEmojiRow();document.getElementById('groupModal').classList.add('open');
+  setTimeout(()=>document.getElementById('groupNameInput').focus(),280);
+}
+function closeGroupModal(){document.getElementById('groupModal').classList.remove('open');gmGid=null;}
+function renderEmojiRow(){
+  const row=document.getElementById('emojiRow');row.innerHTML='';
+  EMOJIS.forEach(em=>{const b=mk('button','modal-emoji'+(em===gmEmoji?' selected':''),em);b.addEventListener('click',()=>{gmEmoji=em;renderEmojiRow();});row.appendChild(b);});
+}
+function saveGroup(){
+  const name=document.getElementById('groupNameInput').value.trim();if(!name)return;
+  if(gmGid){const g=grpById(gmGid);if(g){g.name=name;g.emoji=gmEmoji;}}
+  else groups.push({id:'g'+(++_gid),name,emoji:gmEmoji});
+  closeGroupModal();render();
+}
+document.getElementById('groupModal').addEventListener('click',e=>{if(e.target===document.getElementById('groupModal'))closeGroupModal();});
+document.getElementById('gmCancel').addEventListener('click',closeGroupModal);
+document.getElementById('gmSave').addEventListener('click',saveGroup);
+document.getElementById('groupNameInput').addEventListener('keydown',e=>{if(e.key==='Enter')saveGroup();});
+
+// ═══════════════════ FAB ═══════════════════
+function toggleFab(){fabOpen=!fabOpen;['fabMain','fabMenu','fabBackdrop'].forEach(id=>document.getElementById(id).classList.toggle('open',fabOpen));}
+function closeFab(){fabOpen=false;['fabMain','fabMenu','fabBackdrop'].forEach(id=>document.getElementById(id).classList.remove('open'));}
+document.getElementById('fabMain').addEventListener('click',toggleFab);
+document.getElementById('fabBackdrop').addEventListener('click',closeFab);
+document.getElementById('fabAddAlarm').addEventListener('click',()=>{closeFab();openEdit(null);});
+document.getElementById('fabAddGroup').addEventListener('click',()=>{closeFab();openGroupModal(null);});
+document.getElementById('fabAddTimer').addEventListener('click',()=>{closeFab();openTimerNew();});
+
+// ═══════════════════ EDIT ALARM ═══════════════════
+function openEdit(alarm){
+  eTarget=alarm;eHour=alarm?.hour??7;eMinute=alarm?.minute??0;
+  eDays=alarm?[...alarm.days]:[];eSnooze=alarm?.snooze??5;
+  eSound=alarm?.sound??'';eGid=alarm?.gid??(groups[0]?.id??'');eSoundIdx=0;
+  eVolume=alarm?.volume??80;eVibration=alarm?.vibration??true;eVibPat=alarm?.vibPat??'short';
+  eSkipHoliday=alarm?.skipHoliday??false;
+  document.getElementById('editTitle').textContent=alarm?'アラームを編集':'アラームを追加';
+  document.getElementById('editLabel').value=alarm?.label??'';
+  document.getElementById('snoozeSlider').value=eSnooze;document.getElementById('snoozeVal').textContent=eSnooze;
+  document.getElementById('soundLabel').textContent=eSound||'デフォルト着信音';
+  document.getElementById('soundBtn').classList.toggle('on',!!eSound);
+  updSpinners();renderGroupSel();renderDayChips();updVolUI();updVibUI();updHolidayUI();
+  document.getElementById('listScreen').classList.remove('active');
+  document.getElementById('editScreen').classList.add('active');
+}
+function closeEdit(){document.getElementById('editScreen').classList.remove('active');document.getElementById('listScreen').classList.add('active');}
+function saveAlarm(){
+  const label=document.getElementById('editLabel').value.trim();
+  const data={hour:eHour,minute:eMinute,label,days:eDays,snooze:eSnooze,sound:eSound,gid:eGid,volume:eVolume,vibration:eVibration,vibPat:eVibPat,skipHoliday:eSkipHoliday};
+  if(eTarget)Object.assign(eTarget,data);else alarms.push({id:'a'+(++_aid),enabled:true,...data});
+  render();closeEdit();
+}
+function chTime(f,d){if(f==='h')eHour=(eHour+d+24)%24;else eMinute=(eMinute+d+60)%60;updSpinners();}
+
+function updSpinners(){
+  const isAM=eHour<12;
+  // 時の表示値
+  if(use12h){
+    const h12=eHour%12||12;
+    document.getElementById('spH').textContent=fmt(h12);
+    document.getElementById('spHLbl').textContent='時';
+  } else {
+    document.getElementById('spH').textContent=fmt(eHour);
+    document.getElementById('spHLbl').textContent='時';
+  }
+  document.getElementById('spM').textContent=fmt(eMinute);
+  updEditAmpm();
+}
+
+function updEditAmpm(){
+  const col=document.getElementById('editAmpmCol');
+  const top=document.getElementById('editAmTop');
+  const bot=document.getElementById('editAmBot');
+  if(!use12h){
+    col.style.display='none';
+    return;
+  }
+  col.style.display='flex';
+  const isAM=eHour<12;
+  // アクティブ側：明るい紫、非アクティブ側：グレーアウト
+  top.style.color=isAM?'var(--accent2)':'var(--text2)';
+  top.style.background=isAM?'rgba(184,174,252,0.18)':'transparent';
+  top.style.opacity=isAM?'1':'0.35';
+  bot.style.color=(!isAM)?'var(--accent2)':'var(--text2)';
+  bot.style.background=(!isAM)?'rgba(184,174,252,0.18)':'transparent';
+  bot.style.opacity=(!isAM)?'1':'0.35';
+}
+
+// AM/PM をクリックして切り替え
+document.getElementById('editAmTop').addEventListener('click',()=>{
+  if(eHour>=12)eHour-=12; // → AM
+  updSpinners();
+});
+document.getElementById('editAmBot').addEventListener('click',()=>{
+  if(eHour<12)eHour+=12;  // → PM
+  updSpinners();
+});
+function updVolUI(){const v=eVolume;document.getElementById('volSlider').value=v;document.getElementById('volVal').textContent=v+'%';document.getElementById('volIcon').textContent=v===0?'🔇':v<40?'🔈':v<80?'🔉':'🔊';}
+function updVibUI(){
+  document.getElementById('vibSw').classList.toggle('on',eVibration);
+  document.getElementById('vibPatternRow').style.opacity=eVibration?'1':'0.35';
+  document.getElementById('vibPatternRow').style.pointerEvents=eVibration?'auto':'none';
+  ['short','long','repeat'].forEach(p=>document.getElementById('vib'+p.charAt(0).toUpperCase()+p.slice(1)).classList.toggle('on',eVibPat===p));
+}
+function setVibPat(p){eVibPat=p;updVibUI();}
+
+function updHolidayUI(){
+  document.getElementById('holidaySw').classList.toggle('on',eSkipHoliday);
+  const isHoliday=todayIsHoliday();
+  const today=new Date();
+  const dateStr=`${today.getMonth()+1}/${today.getDate()}`;
+  let sub='祝日はアラームをスキップ';
+  if(eSkipHoliday&&isHoliday) sub=`🎌 今日(${dateStr})は祝日 — スキップされます`;
+  else if(eSkipHoliday&&!isHoliday) sub=`今日(${dateStr})は祝日ではありません`;
+  document.getElementById('holidayStatus').textContent=sub;
+}
+document.getElementById('holidaySw').addEventListener('click',()=>{eSkipHoliday=!eSkipHoliday;updHolidayUI();});
+function renderGroupSel(){
+  const row=document.getElementById('groupSelRow');row.innerHTML='';
+  if(!groups.length){row.innerHTML='<span style="font-size:12px;color:var(--text2)">グループがありません</span>';return;}
+  groups.forEach(g=>{const ch=mk('button','group-chip'+(g.id===eGid?' selected':''),`${g.emoji} ${g.name}`);ch.addEventListener('click',()=>{eGid=g.id;renderGroupSel();});row.appendChild(ch);});
+}
+function renderDayChips(){
+  const row=document.getElementById('dayRow');row.innerHTML='';
+  DAY_LABELS.forEach(d=>{const ch=mk('button','day-chip'+(eDays.includes(d)?' on':''),d);ch.addEventListener('click',()=>{eDays=eDays.includes(d)?eDays.filter(x=>x!==d):[...eDays,d];renderDayChips();document.getElementById('dayHint').textContent=eDays.length?eDays.join('・'):'一回のみ';});row.appendChild(ch);});
+}
+function updSnooze(v){eSnooze=parseInt(v);document.getElementById('snoozeVal').textContent=v;}
+function cycleSound(){eSoundIdx=(eSoundIdx+1)%SOUNDS.length;eSound=eSoundIdx===0?'':SOUNDS[eSoundIdx];document.getElementById('soundLabel').textContent=SOUNDS[eSoundIdx];document.getElementById('soundBtn').classList.toggle('on',eSoundIdx!==0);}
+document.getElementById('editBack').addEventListener('click',closeEdit);
+document.getElementById('editSave').addEventListener('click',saveAlarm);
+document.getElementById('hUp').addEventListener('click',()=>chTime('h',1));
+document.getElementById('hDn').addEventListener('click',()=>chTime('h',-1));
+document.getElementById('mUp').addEventListener('click',()=>chTime('m',5));
+document.getElementById('mDn').addEventListener('click',()=>chTime('m',-5));
+document.getElementById('snoozeSlider').addEventListener('input',e=>updSnooze(e.target.value));
+document.getElementById('soundBtn').addEventListener('click',cycleSound);
+document.getElementById('volSlider').addEventListener('input',e=>{eVolume=parseInt(e.target.value);updVolUI();});
+document.getElementById('vibSw').addEventListener('click',()=>{eVibration=!eVibration;updVibUI();});
+
+// ═══════════════════ CLOCK ═══════════════════
+function updClock(){const n=new Date();document.getElementById('clock').textContent=fmt(n.getHours())+':'+fmt(n.getMinutes());}
+updClock();setInterval(updClock,1000);
+
+// ═══════════════════ localStorage 永続化 ═══════════════════
+function saveData(){
+  try{
+    localStorage.setItem('alarms',JSON.stringify(alarms));
+    localStorage.setItem('timers',JSON.stringify(timers.map(t=>({...t,interval:null}))));
+    localStorage.setItem('groups',JSON.stringify(groups));
+    localStorage.setItem('groupOrder',JSON.stringify(groupOrder));
+    localStorage.setItem('collapsed',JSON.stringify(collapsed));
+    localStorage.setItem('use12h',JSON.stringify(use12h));
+  }catch(e){console.warn('saveData failed',e);}
+}
+function loadData(){
+  try{
+    const a=localStorage.getItem('alarms');if(a)alarms=JSON.parse(a);
+    const t=localStorage.getItem('timers');
+    if(t){
+      timers=JSON.parse(t).map(x=>({...x,interval:null,running:false,_started:x._started??false}));
+    }
+    const g=localStorage.getItem('groups');if(g)groups=JSON.parse(g);
+    const go=localStorage.getItem('groupOrder');if(go)Object.assign(groupOrder,JSON.parse(go));
+    const co=localStorage.getItem('collapsed');if(co)Object.assign(collapsed,JSON.parse(co));
+    const h=localStorage.getItem('use12h');if(h!=null){use12h=JSON.parse(h);document.getElementById('hToggleBtn').textContent=use12h?'12h':'24h';}
+  }catch(e){console.warn('loadData failed',e);}
+}
+
+// render() をラップして自動保存
+function render(){_renderCore();saveData();}
+
+// ═══════════════════ アラーム通知エンジン ═══════════════════
+let _lastAlarmMinute='';
+const _snoozed={};
+
+function playAlarmSound(volume=80){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const gain=ctx.createGain();gain.gain.value=volume/100;gain.connect(ctx.destination);
+    [880,1100,880,1100].forEach((freq,i)=>{
+      const osc=ctx.createOscillator();osc.type='sine';osc.frequency.value=freq;
+      osc.connect(gain);osc.start(ctx.currentTime+i*0.3);osc.stop(ctx.currentTime+i*0.3+0.25);
+    });
+    setTimeout(()=>ctx.close(),2000);
+  }catch(e){}
+}
+
+function fireTimerNotification(t){
+  const title=t.label||'タイマー';
+  if(Notification.permission==='granted'){
+    const n=new Notification('⏱ '+title+' 終了',{body:'タイマーが終了しました',icon:'icons/icon-192.png',tag:'timer-'+t.id,renotify:true});
+    n.onclick=()=>{window.focus();n.close();};
+  }
+  playAlarmSound(t.volume??80);
+  if(t.vibration&&navigator.vibrate){
+    const pat=t.vibPat==='long'?[500,200,500,200,500]:t.vibPat==='repeat'?[300,100,300,100,300,100,300]:[200,100,200];
+    navigator.vibrate(pat);
+  }
+}
+
+function fireAlarmNotification(alarm){
+  const title=alarm.label||'アラーム';
+  const body=`${fmt(alarm.hour)}:${fmt(alarm.minute)}`;
+  if(Notification.permission==='granted'){
+    const n=new Notification('⏰ '+title,{body,icon:'icons/icon-192.png',tag:'alarm-'+alarm.id,renotify:true});
+    n.onclick=()=>{window.focus();n.close();};
+  }
+  playAlarmSound(alarm.volume??80);
+  if(alarm.vibration&&navigator.vibrate){
+    const pat=alarm.vibPat==='long'?[500,200,500,200,500]:alarm.vibPat==='repeat'?[300,100,300,100,300,100,300]:[200,100,200];
+    navigator.vibrate(pat);
+  }
+}
+
+function checkAlarms(){
+  const now=new Date();
+  const key=fmt(now.getHours())+':'+fmt(now.getMinutes());
+  if(key===_lastAlarmMinute)return;
+  _lastAlarmMinute=key;
+
+  const dayLabels=['日','月','火','水','木','金','土'];
+  const today=dayLabels[now.getDay()];
+
+  alarms.forEach(alarm=>{
+    if(!alarm.enabled)return;
+    if(fmt(alarm.hour)+':'+fmt(alarm.minute)!==key)return;
+    // 繰り返し曜日チェック
+    if(alarm.days.length&&!alarm.days.includes(today))return;
+    // 祝日除外チェック
+    if(alarm.skipHoliday&&isJapaneseHoliday(now))return;
+    // スヌーズ中チェック
+    if(_snoozed[alarm.id]){const s=_snoozed[alarm.id];if(s.until>Date.now())return;delete _snoozed[alarm.id];}
+    fireAlarmNotification(alarm);
+  });
+}
+setInterval(checkAlarms,10000); // 10秒ごとにチェック
+checkAlarms();
+
+// ═══════════════════ 通知許可リクエスト ═══════════════════
+function requestNotifPerm(){
+  if('Notification' in window&&Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+// 最初のユーザー操作で許可ダイアログを出す
+document.addEventListener('pointerdown',requestNotifPerm,{once:true});
+
+// ═══════════════════ Service Worker 登録 ═══════════════════
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+// ─── 初期データ読み込み ───
+loadData();
+render();
+</script>
+</body>
+</html>
