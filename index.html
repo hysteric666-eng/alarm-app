@@ -1403,6 +1403,7 @@ function cycleTeSnd(){
   teSoundIdx=(teSoundIdx+1)%SOUNDS.length;
   teSound=teSoundIdx===0?'':SOUNDS[teSoundIdx];
   updTeSoundUI();
+  playAlarmSound(teVolume,teSound);
 }
 document.getElementById('teSoundBtn').addEventListener('click',cycleTeSnd);
 
@@ -1562,7 +1563,7 @@ function renderDayChips(){
   DAY_LABELS.forEach(d=>{const ch=mk('button','day-chip'+(eDays.includes(d)?' on':''),d);ch.addEventListener('click',()=>{eDays=eDays.includes(d)?eDays.filter(x=>x!==d):[...eDays,d];renderDayChips();document.getElementById('dayHint').textContent=eDays.length?eDays.join('・'):'一回のみ';});row.appendChild(ch);});
 }
 function updSnooze(v){eSnooze=parseInt(v);document.getElementById('snoozeVal').textContent=v;}
-function cycleSound(){eSoundIdx=(eSoundIdx+1)%SOUNDS.length;eSound=eSoundIdx===0?'':SOUNDS[eSoundIdx];document.getElementById('soundLabel').textContent=SOUNDS[eSoundIdx];document.getElementById('soundBtn').classList.toggle('on',eSoundIdx!==0);}
+function cycleSound(){eSoundIdx=(eSoundIdx+1)%SOUNDS.length;eSound=eSoundIdx===0?'':SOUNDS[eSoundIdx];document.getElementById('soundLabel').textContent=SOUNDS[eSoundIdx];document.getElementById('soundBtn').classList.toggle('on',eSoundIdx!==0);playAlarmSound(eVolume,eSound);}
 document.getElementById('editBack').addEventListener('click',closeEdit);
 document.getElementById('editSave').addEventListener('click',saveAlarm);
 document.getElementById('hUp').addEventListener('click',()=>chTime('h',1));
