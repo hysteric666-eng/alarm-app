@@ -1708,6 +1708,7 @@ let _firingInterval=null;
 let _timerFireInterval=null;
 
 function showAlarmFireScreen(alarmsToFire){
+  dismissTimerFire();
   _firingAlarms=alarmsToFire;
   const overlay=document.getElementById('alarmFireOverlay');
   const timeEl=document.getElementById('alarmFireTime');
@@ -1752,6 +1753,7 @@ function dismissAlarmFire(){
 }
 
 function showTimerFireScreen(timer){
+  dismissAlarmFire();
   const overlay=document.getElementById('timerFireOverlay');
   document.getElementById('timerFireName').textContent=timer.label||'タイマー';
   overlay.classList.add('open');
