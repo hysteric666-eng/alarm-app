@@ -1751,8 +1751,12 @@ function dismissTimerFire(){
 }
 
 document.getElementById('alarmFireStop').addEventListener('click',()=>{
-  _firingAlarms.forEach(a=>addHistory('fired',a.label||'アラーム',`${fmt(a.hour)}:${fmt(a.minute)} — 停止`));
+  _firingAlarms.forEach(a=>{
+    addHistory('fired',a.label||'アラーム',`${fmt(a.hour)}:${fmt(a.minute)} — 停止`);
+    if(a.days.length===0){a.enabled=false;}
+  });
   dismissAlarmFire();
+  render();
 });
 
 document.getElementById('alarmFireSnooze').addEventListener('click',()=>{
