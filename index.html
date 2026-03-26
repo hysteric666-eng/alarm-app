@@ -147,6 +147,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 /* グループ右端 */
 .g-right{display:flex;align-items:center;flex-shrink:0;}
 .g-count{font-size:11px;color:var(--text2);margin-right:4px;}
+.g-bulk-toggle{background:none;border:none;font-size:13px;cursor:pointer;
+  width:24px;height:24px;padding:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity 0.15s,background 0.15s;
+  touch-action:manipulation;margin-right:2px;}
+.group-header:hover .g-bulk-toggle{opacity:1;}
+.g-bulk-toggle:hover{background:rgba(123,111,240,0.18);}
 .g-chevron{font-size:15px;font-weight:700;color:var(--text2);transition:transform 0.2s;display:inline-block;
   width:42px;text-align:center;}
 .group-header.collapsed .g-chevron{transform:rotate(-90deg);}
@@ -1074,13 +1081,25 @@ function _renderCore(){
     const right=mk('div','g-right');
     const gTimerCount=timers.filter(t=>t.gid===g.id).length;
     const totalCount=gAlarms.length+gTimerCount;
+    if(gAlarms.length>0){
+      const allOn=gAlarms.every(a=>a.enabled);
+      const bulkBtn=mk('button','g-bulk-toggle',allOn?'⏸':'▶');
+      bulkBtn.title=allOn?'グループを一括OFF':'グループを一括ON';
+      bulkBtn.addEventListener('click',e=>{
+        e.stopPropagation();
+        const shouldEnable=!gAlarms.every(a=>a.enabled);
+        gAlarms.forEach(a=>{a.enabled=shouldEnable;});
+        render();
+      });
+      right.appendChild(bulkBtn);
+    }
     right.appendChild(mk('span','g-count',`${totalCount}件`));
     const delBtn=mk('button','g-del','🗑️');
     delBtn.addEventListener('click',e=>{e.stopPropagation();showConfirm('🗑️',`グループ <strong>「${escH(g.name)}」</strong> を削除しますか？<small>アラームはグループなしに移動します</small>`,()=>{groups=groups.filter(x=>x.id!==g.id);alarms.forEach(a=>{if(a.gid===g.id)a.gid='';});timers.forEach(t=>{if(t.gid===g.id)t.gid='';});render();});});
     right.appendChild(delBtn);
     right.appendChild(mk('span','g-chevron','›'));
     hdr.appendChild(right);
-    hdr.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.g-handle,.g-emoji-btn,.g-name,.g-del'))return;collapsed[g.id]=!collapsed[g.id];render();});
+    hdr.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.g-handle,.g-emoji-btn,.g-name,.g-del,.g-bulk-toggle'))return;collapsed[g.id]=!collapsed[g.id];render();});
     wrap.appendChild(hdr);
 
     // アラーム・タイマーを混在描画（配列の登場順）
