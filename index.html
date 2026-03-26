@@ -21,10 +21,10 @@
 body{background:var(--bg);color:var(--text);font-family:var(--font);
   min-height:100vh;display:flex;padding:0;margin:0;}
 .phone{width:100%;height:100vh;background:var(--bg);overflow:hidden;position:relative;
-  display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);}
+  display:flex;flex-direction:column;}
 .screen{display:none;flex-direction:column;flex:1;overflow:hidden;}
 .screen.active{display:flex;}
-.topbar{padding:10px 20px;display:flex;align-items:center;justify-content:space-between;
+.topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 20px 10px;display:flex;align-items:center;justify-content:space-between;
   background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
 .topbar-title{font-size:19px;font-weight:700;color:var(--text);}
 .topbar-btn{background:none;border:none;color:var(--accent2);font-size:14px;font-weight:500;
