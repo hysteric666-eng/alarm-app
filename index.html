@@ -587,6 +587,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
     <div class="alarm-fire-snooze-info" id="alarmFireSnoozeInfo">5分後に再通知</div>
   </div>
 
+  <!-- TIMER FIRE OVERLAY -->
+  <div class="alarm-fire-overlay" id="timerFireOverlay">
+    <div class="alarm-fire-icon">⏱️</div>
+    <div class="alarm-fire-time" id="timerFireName">タイマー</div>
+    <div class="alarm-fire-label">タイマーが終了しました</div>
+    <div class="alarm-fire-btns">
+      <button class="alarm-fire-btn alarm-fire-stop" id="timerFireStop">停止</button>
+    </div>
+  </div>
+
   <!-- SETTINGS OVERLAY -->
   <div class="settings-overlay" id="settingsOverlay">
     <div class="settings-sheet">
@@ -1669,14 +1679,14 @@ function fireTimerNotification(t){
     const n=new Notification('⏱ '+title+' 終了',{body:'タイマーが終了しました',icon:'icons/icon-192.png',tag:'timer-'+t.id,renotify:true});
     n.onclick=()=>{window.focus();n.close();};
   }
-  playAlarmSound(t.volume??80,t.sound||'');
-  doVibrate(t.vibration,t.vibPat);
   addHistory('fired','⏱ '+title+' 終了','タイマーが終了しました');
+  showTimerFireScreen(t);
 }
 
 // ── フルスクリーンアラーム表示 ──
 let _firingAlarms=[];
 let _firingInterval=null;
+let _timerFireInterval=null;
 
 function showAlarmFireScreen(alarmsToFire){
   _firingAlarms=alarmsToFire;
@@ -1722,6 +1732,24 @@ function dismissAlarmFire(){
   _firingAlarms=[];
 }
 
+function showTimerFireScreen(timer){
+  const overlay=document.getElementById('timerFireOverlay');
+  document.getElementById('timerFireName').textContent=timer.label||'タイマー';
+  overlay.classList.add('open');
+  const vol=timer.volume??80;
+  const snd=timer.sound||'';
+  playAlarmSound(vol,snd);
+  _timerFireInterval=setInterval(()=>playAlarmSound(vol,snd),3000);
+  doVibrate(timer.vibration??true,timer.vibPat||'short');
+}
+
+function dismissTimerFire(){
+  document.getElementById('timerFireOverlay').classList.remove('open');
+  stopAlarmSound();
+  if(_timerFireInterval){clearInterval(_timerFireInterval);_timerFireInterval=null;}
+  if(navigator.vibrate)navigator.vibrate(0);
+}
+
 document.getElementById('alarmFireStop').addEventListener('click',()=>{
   _firingAlarms.forEach(a=>addHistory('fired',a.label||'アラーム',`${fmt(a.hour)}:${fmt(a.minute)} — 停止`));
   dismissAlarmFire();
@@ -1734,6 +1762,10 @@ document.getElementById('alarmFireSnooze').addEventListener('click',()=>{
     addHistory('snoozed',alarm.label||'アラーム',`${fmt(alarm.hour)}:${fmt(alarm.minute)} — ${snoozeMin}分スヌーズ`);
   });
   dismissAlarmFire();
+});
+
+document.getElementById('timerFireStop').addEventListener('click',()=>{
+  dismissTimerFire();
 });
 
 function fireAlarmNotification(alarm){
