@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>目覚まし時計</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#7b6ff0">
+<meta name="theme-color" content="#0f0f14">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="アラーム">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
@@ -24,7 +24,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   display:flex;flex-direction:column;}
 .screen{display:none;flex-direction:column;flex:1;overflow:hidden;}
 .screen.active{display:flex;}
-.topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 20px 10px;display:flex;align-items:center;justify-content:space-between;
+.topbar{padding:10px 20px 10px;display:flex;align-items:center;justify-content:space-between;
   background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
 .topbar-title{font-size:19px;font-weight:700;color:var(--text);}
 .topbar-btn{background:none;border:none;color:var(--accent2);font-size:14px;font-weight:500;
@@ -49,11 +49,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   cursor:default;touch-action:none;}
 .group-header.lp-hint{background:var(--surface2);border-color:var(--accent2);}
 .group-header.drop-here{border-color:var(--accent);background:rgba(123,111,240,0.14);}
-.g-handle{color:var(--text2);font-size:15px;cursor:grab;opacity:0.35;
-  flex-shrink:0;line-height:1;padding:2px 0;touch-action:none;transition:opacity 0.15s;}
-.group-header:hover .g-handle{opacity:0.8;}
+.g-handle{color:var(--text2);font-size:15px;cursor:grab;opacity:0.55;
+  flex-shrink:0;line-height:1;padding:2px 4px;touch-action:none;transition:opacity 0.15s;}
+.group-header:hover .g-handle{opacity:1;}
 .g-handle.lp-hint{opacity:1;color:var(--accent2);}
 .g-handle-gap{width:9px;flex-shrink:0;}
+.item-handle{color:var(--text2);font-size:15px;cursor:grab;opacity:0.5;
+  flex-shrink:0;line-height:1;padding:4px 4px 4px 8px;touch-action:none;
+  transition:opacity 0.15s;user-select:none;}
+.alarm-card:hover .item-handle,.timer-card:hover .item-handle{opacity:0.9;}
+.item-handle:active{cursor:grabbing;opacity:1;}
 .g-emoji-btn{background:none;border:none;cursor:default;font-size:17px;padding:0 4px 0 0;line-height:1;flex-shrink:0;}
 .g-name{font-size:13px;font-weight:600;color:var(--text);flex:1;cursor:default;
   padding:2px 0;border-bottom:1px solid transparent;transition:border-color 0.15s;}
@@ -380,8 +385,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 
 /* ── SETTINGS MENU ── */
 .settings-btn{background:var(--surface2);border:1px solid var(--border);border-radius:12px;
-  font-size:11px;font-weight:700;cursor:pointer;padding:4px 9px;color:var(--text2);
-  font-family:var(--font);transition:all 0.15s;letter-spacing:0.03em;}
+  font-size:17px;cursor:pointer;padding:4px 8px;color:var(--text2);
+  line-height:1;transition:all 0.15s;}
 .settings-btn:hover{background:var(--accent);border-color:var(--accent);}
 .settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:80;
   display:flex;align-items:flex-end;justify-content:center;
@@ -431,7 +436,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
       <div class="topbar-title">⏰ 目覚まし時計</div>
       <div style="display:flex;align-items:center;gap:6px;">
         <button class="h-toggle" id="hToggleBtn" onclick="toggleHourMode()">24h</button>
-        <button class="settings-btn" id="settingsBtn" title="設定">設定</button>
+        <button class="settings-btn" id="settingsBtn" title="設定">⚙</button>
       </div>
     </div>
     <div id="notifDeniedBanner"></div>
@@ -627,7 +632,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
         <div class="settings-item-icon">📋</div>
         <div class="settings-item-text">
           <div class="settings-item-title">アラーム履歴</div>
-          <div class="settings-item-sub">発火・スヌーズ・スキップの記録</div>
+          <div class="settings-item-sub">アラーム・スヌーズ・スキップの記録</div>
         </div>
       </div>
     </div>
@@ -692,12 +697,11 @@ let teSound='',teSoundIdx=0,teVolume=80,teVibration=true,teVibPat='short';
 const LP_MS=420,LP_MOVE=10;
 let drag={timer:null,active:false,type:null,id:null,sourceEl:null,ghost:null,offX:0,offY:0,startX:0,startY:0,curX:0,curY:0};
 
-function dragStart(e,type,id,sourceEl){
+function dragStart(e,type,id,sourceEl,immediate=false){
   if(drag.active||drag.timer)return;
   const pt=point(e);
   drag.startX=pt.x;drag.startY=pt.y;
-  sourceEl.classList.add('lp-hint');
-  drag.timer=setTimeout(()=>{
+  const activate=()=>{
     drag.timer=null;drag.active=true;drag.type=type;drag.id=id;drag.sourceEl=sourceEl;
     sourceEl.classList.remove('lp-hint');sourceEl.classList.add('is-dragging');
     const r=sourceEl.getBoundingClientRect();
@@ -708,7 +712,9 @@ function dragStart(e,type,id,sourceEl){
     posG(g,pt.x,pt.y);document.body.appendChild(g);drag.ghost=g;
     if(navigator.vibrate)navigator.vibrate(45);
     document.body.style.overflow='hidden';updateUI();
-  },LP_MS);
+  };
+  if(immediate){activate();}
+  else{sourceEl.classList.add('lp-hint');drag.timer=setTimeout(activate,LP_MS);}
 }
 function posG(g,x,y){g.style.left=(x-drag.offX)+'px';g.style.top=(y-drag.offY)+'px';}
 function dragMove(e){
@@ -1070,10 +1076,8 @@ function _renderCore(){
     const gAlarms=alarms.filter(a=>a.gid===g.id);
     const wrap=mk('div','group-wrap');wrap.dataset.gid=g.id;
     const hdr=mk('div','group-header'+(collapsed[g.id]?' collapsed':''));
-    const handle=mk('div','g-handle','⠿');handle.title='長押しで移動';
-    handle.addEventListener('pointerdown',e=>{e.stopPropagation();dragStart(e,'group',g.id,hdr);});
-    hdr.appendChild(handle);
-    const gap=mk('div','g-handle-gap');hdr.appendChild(gap);
+    const handle=mk('div','g-handle','⠿');handle.title='ドラッグで移動';
+    handle.addEventListener('pointerdown',e=>{e.stopPropagation();dragStart(e,'group',g.id,hdr,true);});
     const emojiBtn=mk('button','g-emoji-btn',g.emoji);emojiBtn.title='長押しで編集';
     attachLPEdit(emojiBtn,g.id);hdr.appendChild(emojiBtn);
     const nameSpan=mk('span','g-name',g.name);nameSpan.title='長押しで編集';
@@ -1098,6 +1102,7 @@ function _renderCore(){
     delBtn.addEventListener('click',e=>{e.stopPropagation();showConfirm('🗑️',`グループ <strong>「${escH(g.name)}」</strong> を削除しますか？<small>アラームはグループなしに移動します</small>`,()=>{groups=groups.filter(x=>x.id!==g.id);alarms.forEach(a=>{if(a.gid===g.id)a.gid='';});timers.forEach(t=>{if(t.gid===g.id)t.gid='';});render();});});
     right.appendChild(delBtn);
     right.appendChild(mk('span','g-chevron','›'));
+    right.appendChild(handle);
     hdr.appendChild(right);
     hdr.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.g-handle,.g-emoji-btn,.g-name,.g-del,.g-bulk-toggle'))return;collapsed[g.id]=!collapsed[g.id];render();});
     wrap.appendChild(hdr);
@@ -1130,7 +1135,7 @@ function _renderCore(){
 function makeAlarmCard(alarm){
   const card=mk('div','alarm-card'+(alarm.enabled?'':' disabled'));
   card.dataset.aid=alarm.id;
-  card.addEventListener('pointerdown',e=>{if(e.target.closest('.a-del,.toggle'))return;dragStart(e,'alarm',alarm.id,card);});
+  card.addEventListener('pointerdown',e=>{if(e.target.closest('.a-del,.toggle,.item-handle'))return;dragStart(e,'alarm',alarm.id,card);});
 
   // AM/PM 縦バッジ（12hモード時のみ）
   if(use12h){
@@ -1161,8 +1166,12 @@ function makeAlarmCard(alarm){
   actions.appendChild(del);
   const tog=mk('button','toggle'+(alarm.enabled?' on':''));
   tog.addEventListener('click',e=>{e.stopPropagation();alarm.enabled=!alarm.enabled;render();});
-  actions.appendChild(tog);card.appendChild(actions);
-  card.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.a-del,.toggle'))return;openEdit(alarm);});
+  actions.appendChild(tog);
+  const aHandle=mk('div','item-handle','⠿');
+  aHandle.addEventListener('pointerdown',e=>{e.stopPropagation();dragStart(e,'alarm',alarm.id,card,true);});
+  actions.appendChild(aHandle);
+  card.appendChild(actions);
+  card.addEventListener('click',e=>{if(drag.active)return;if(e.target.closest('.a-del,.toggle,.item-handle'))return;openEdit(alarm);});
   return card;
 }
 
@@ -1196,8 +1205,8 @@ function makeTimerCard(t){
 
   // 長押しでドラッグ（グループ間移動）
   card.addEventListener('pointerdown',e=>{
-    if(e.target.closest('.tc-btn,.tc-del'))return;
-    e.stopPropagation(); // group-header へのバブルを防ぐ
+    if(e.target.closest('.tc-btn,.tc-del,.item-handle'))return;
+    e.stopPropagation();
     dragStart(e,'timer',t.id,card);
   });
 
@@ -1245,12 +1254,15 @@ function makeTimerCard(t){
   const playBtn=mk('button',playCls,playIcon);
   playBtn.addEventListener('click',e=>{e.stopPropagation();timerCardToggle(t.id);});
   actions.appendChild(playBtn);
+  const tHandle=mk('div','item-handle','⠿');
+  tHandle.addEventListener('pointerdown',e=>{e.stopPropagation();dragStart(e,'timer',t.id,card,true);});
+  actions.appendChild(tHandle);
   card.appendChild(actions);
 
   // タップで編集（ドラッグ中・ボタン以外）
   card.addEventListener('click',e=>{
     if(drag.active)return;
-    if(e.target.closest('.tc-btn,.tc-del'))return;
+    if(e.target.closest('.tc-btn,.tc-del,.item-handle'))return;
     openTimerEdit(t);
   });
   return card;
@@ -1617,6 +1629,7 @@ function saveData(){
     localStorage.setItem('use12h',JSON.stringify(use12h));
   }catch(e){console.warn('saveData failed',e);}
   syncScheduledAlarms();
+  syncAlarmStatusNotifications();
 }
 function loadData(){
   try{
@@ -1908,6 +1921,38 @@ async function syncScheduledAlarms(){
   try{if(notifications.length)await LN.schedule({notifications});}catch(e){}
 }
 
+// ═══════════════════ アラームステータス通知（1件ずつ常駐） ═══════════════════
+async function syncAlarmStatusNotifications(){
+  if(!('serviceWorker' in navigator))return;
+  if(Notification.permission!=='granted')return;
+  let reg;
+  try{reg=await navigator.serviceWorker.ready;}catch(e){return;}
+  // 無効・削除されたアラームの通知を閉じる
+  try{
+    const existing=await reg.getNotifications();
+    for(const n of existing){
+      if(!n.tag||!n.tag.startsWith('alarm-status-'))continue;
+      const id=n.tag.slice('alarm-status-'.length);
+      const alarm=alarms.find(a=>a.id===id);
+      if(!alarm||!alarm.enabled)n.close();
+    }
+  }catch(e){}
+  // 有効なアラームごとに通知を表示・更新
+  for(const alarm of alarms){
+    if(!alarm.enabled)continue;
+    const days=alarm.days.length?alarm.days.join('・'):'一回のみ';
+    try{
+      await reg.showNotification(`⏰ ${alarm.label||'アラーム'} ${fmt(alarm.hour)}:${fmt(alarm.minute)}`,{
+        body:days,
+        icon:'icons/icon-192.png',
+        tag:`alarm-status-${alarm.id}`,
+        renotify:false,
+        silent:true
+      });
+    }catch(e){}
+  }
+}
+
 // ═══════════════════ 通知許可リクエスト ═══════════════════
 async function requestNotifPerm(){
   if(isNative()){
@@ -2070,7 +2115,7 @@ function renderHistory(){
   h.forEach(item=>{
     const el=document.createElement('div');el.className='history-item';
     const iconMap={fired:'🔔',snoozed:'💤',skipped:'⏭'};
-    const typeMap={fired:'発火',snoozed:'スヌーズ',skipped:'スキップ'};
+    const typeMap={fired:'アラーム',snoozed:'スヌーズ',skipped:'スキップ'};
     const clsMap={fired:'history-type-fired',snoozed:'history-type-snoozed',skipped:'history-type-skipped'};
     const d=new Date(item.time);
     const dateStr=`${d.getMonth()+1}/${d.getDate()} ${fmt(d.getHours())}:${fmt(d.getMinutes())}`;
@@ -2108,7 +2153,7 @@ function _updateBanners(){
 // ─── 初期データ読み込み ───
 loadData();
 render();
-initNotifChannel().then(()=>syncScheduledAlarms());
+initNotifChannel().then(()=>{syncScheduledAlarms();syncAlarmStatusNotifications();});
 </script>
 </body>
 </html>

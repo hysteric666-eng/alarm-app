@@ -1,4 +1,4 @@
-const CACHE = 'alarm-app-v1';
+const CACHE = 'alarm-app-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -24,5 +24,17 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({type:'window',includeUncontrolled:true}).then(clients => {
+      for(const c of clients){
+        if(c.url && 'focus' in c) return c.focus();
+      }
+      return self.clients.openWindow('./');
+    })
   );
 });
